@@ -28,7 +28,7 @@ char key;
 
 int main()
 {
-    HANDLE hThreads[1];
+    HANDLE hThreadLeituraDados;
     unsigned dwThreadId;
 
     hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -39,7 +39,7 @@ int main()
 
     InitializeCriticalSection(&csConsole);
 
-    hThreads[0] = (HANDLE)_beginthreadex(
+    hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
         0,
         &ThreadLeituraDados,
@@ -47,6 +47,19 @@ int main()
         0,
         &dwThreadId
     );
+    if (hThreadLeituraDados) {
+		EnterCriticalSection(&csConsole);
+		SetConsoleTextAttribute(hOut, CCWHITE);
+		printf("Thread Leitura de Dados criada\n");
+		LeaveCriticalSection(&csConsole);
+    }
+    else {
+		EnterCriticalSection(&csConsole);
+		SetConsoleTextAttribute(hOut, CCRED);
+		printf("Erro na criação da thread Leitura de Dados!\n");
+		LeaveCriticalSection(&csConsole);
+        exit(0);
+    }
 
     do {
         key = _getch();
@@ -61,8 +74,8 @@ int main()
         }
     } while (key != ESC);
 
-    WaitForSingleObject(hThreads[0], INFINITE);
-    CloseHandle(hThreads[0]);
+    WaitForSingleObject(hThreadLeituraDados, INFINITE);
+    CloseHandle(hThreadLeituraDados);
 
     EnterCriticalSection(&csConsole);
     SetConsoleTextAttribute(hOut, CCRED);
