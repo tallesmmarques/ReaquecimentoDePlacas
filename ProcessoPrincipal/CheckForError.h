@@ -8,7 +8,6 @@
 //	Versão: 1.1	20/01/1999
 //
 
-#include <Windows.h>
 #pragma comment( lib, "USER32" )
 
 #define CheckForError(ret) if (!(ret)) CheckReturn(__FILE__, __LINE__)

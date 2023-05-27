@@ -65,6 +65,21 @@ int main()
 
     InitializeCriticalSection(&csConsole);
 
+    hThreadLeituraDados = (HANDLE)_beginthreadex(
+        NULL,
+        0,
+        (CAST_FUNCTION) ThreadLeituraDados,
+        (LPVOID) NULL,
+        0,
+        (CAST_LPDWORD) & dwThreadId
+    );
+    if (hThreadLeituraDados) {
+		cc_printf(CCWHITE, "Thread Leitura de Dados criada\n");
+    } else {
+		cc_printf(CCRED, "Erro na criação da thread Leitura de Dados!\n");
+        exit(0);
+    }
+
     hThreadLeituraTeclado = (HANDLE)_beginthreadex(
         NULL,
         0,
@@ -74,17 +89,30 @@ int main()
         (CAST_LPDWORD) & dwThreadId
     );
     if (hThreadLeituraTeclado) {
-		cc_printf(CCWHITE, "Thread Leitura de Dados criada\n");
+		cc_printf(CCWHITE, "Thread Leitura do Teclado criada\n");
     } else {
-		cc_printf(CCRED, "Erro na criação da thread Leitura de Dados!\n");
+		cc_printf(CCRED, "Erro na criação da thread Leitura do Teclado!\n");
         exit(0);
     }
 
-    WaitForSingleObject(hThreadLeituraTeclado, INFINITE);
+    DWORD dwRet;
+    const DWORD numThreads = 2;
+    HANDLE hThreads[numThreads];
+    hThreads[0] = hThreadLeituraDados;
+    hThreads[1] = hThreadLeituraTeclado;
+
+    dwRet = WaitForMultipleObjects(numThreads, hThreads, TRUE, INFINITE);
+    //CheckForError(dwRet == WAIT_OBJECT_0);
+
+    if (!((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numThreads)))
+    {
+        cc_printf(CCRED, "Erro no WaitForMultipleObjects da thread main\n");
+    }
+
+    CloseHandle(hThreadLeituraDados);
     CloseHandle(hThreadLeituraTeclado);
 
-    cc_printf(CCRED, "Saindo da thread principal\n");
-
+    cc_printf(CCRED, "Saindo da thread Principal\n");
     exit(EXIT_SUCCESS);
 }
 
@@ -132,19 +160,13 @@ void WINAPI ThreadLeituraDados(void* tArgs) {
             NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
             TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
 
-		EnterCriticalSection(&csConsole);
-		SetConsoleTextAttribute(hOut, CCGREEN);
-        printf(msg);
-		LeaveCriticalSection(&csConsole);
+        cc_printf(CCGREEN, msg);
 
         Sleep(1000);
         NSEQ = (NSEQ + 1) % 10000;
     } while (key != ESC);
 
-    EnterCriticalSection(&csConsole);
-    SetConsoleTextAttribute(hOut, CCRED);
-    printf("Saindo da thread leitura de dados\n");
-    LeaveCriticalSection(&csConsole);
+    cc_printf(CCRED, "Saindo da thread Leitura de Dados\n");
 
     _endthreadex(0);
 }
