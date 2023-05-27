@@ -6,7 +6,8 @@
 #include <process.h>
 
 // Constantes
-const int ESC = 27;
+static const int ESC = 27;
+static const int MAX_MSG = 50;
 
 // Cores e ferramentas para Console
 #define CCRED   FOREGROUND_RED   | FOREGROUND_INTENSITY
@@ -87,20 +88,27 @@ int main()
 }
 
 unsigned _stdcall ThreadLeituraDados(void* tArgs) {
+    char msg[MAX_MSG];
+
 	int NSEQ = 1;
     int TIPO = 55;
     double T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO;
+    SYSTEMTIME TIMESTAMP;
 
 	do {
         T_ZONA_P = RandReal(700, 900);
         T_ZONA_A = RandReal(901, 1200);
         T_ZONA_E = RandReal(1201, 1400);
         PRESSAO  = RandReal(10, 12);
+        GetLocalTime(&TIMESTAMP);
+
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f$%02d:%02d:%02d\n", 
+            NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
+            TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
 
 		EnterCriticalSection(&csConsole);
 		SetConsoleTextAttribute(hOut, CCGREEN);
-		printf("%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f\n", 
-            NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO);
+        printf(msg);
 		LeaveCriticalSection(&csConsole);
 
         Sleep(1000);
