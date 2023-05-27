@@ -1,4 +1,6 @@
-#include <Windows.h>
+#define WIN32_LEAN_AND_MEAN 
+
+#include <windows.h>
 #include <stdio.h>
 #include <string>
 #include <conio.h>
@@ -13,6 +15,7 @@ static const int MAX_MSG = 50;
 // Utilitários
 #define _CHECKERROR    1        // Ativa função CheckForError
 #include "CheckForError.h"
+
 typedef unsigned (WINAPI* CAST_FUNCTION)(LPVOID);
 typedef unsigned* CAST_LPDWORD;
 
@@ -24,9 +27,9 @@ typedef unsigned* CAST_LPDWORD;
 HANDLE hOut;
 CRITICAL_SECTION csConsole;
 
-// Funções e Threads
-void WINAPI ThreadLeituraTeclado(void*);
-void WINAPI ThreadLeituraDados(void*);
+// Funções, Threads e Eventos
+void WINAPI ThreadLeituraTeclado(LPVOID);
+void WINAPI ThreadLeituraDados(LPVOID);
 
 double RandReal(double min, double max) 
 {
@@ -48,6 +51,9 @@ void cc_printf(const int color, const char* format, ...)
 	LeaveCriticalSection(&csConsole);
 }
 
+HANDLE hBlockLeituraEvent;
+HANDLE hTermLeituraEvent;
+
 // Globais
 char key;
 
@@ -64,6 +70,11 @@ int main()
     }
 
     InitializeCriticalSection(&csConsole);
+
+    hBlockLeituraEvent = CreateEvent(NULL, TRUE, FALSE, TEXT("BlockLeituraEvent"));
+    //CheckForError(hBlockLeituraEvent);
+    hTermLeituraEvent = CreateEvent(NULL, TRUE, FALSE, TEXT("TermLeituraEvent"));
+    //CheckForError(hTermLeituraEvent);
 
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
@@ -141,7 +152,7 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs) {
     _endthreadex(0);
 }
 
-void WINAPI ThreadLeituraDados(void* tArgs) {
+void WINAPI ThreadLeituraDados(LPVOID tArgs) {
     char msg[MAX_MSG];
 
 	int NSEQ = 1;

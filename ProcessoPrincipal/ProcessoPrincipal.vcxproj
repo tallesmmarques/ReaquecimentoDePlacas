@@ -43,7 +43,7 @@
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
-    <CharacterSet>Unicode</CharacterSet>
+    <CharacterSet>NotSet</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
@@ -130,11 +130,10 @@
     <ClCompile Include="ProcessoPrincipal.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CheckForError.h" />
-    <ClInclude Include="resource.h" />
+    <ResourceCompile Include="ProcessoPrincipal.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="ProcessoPrincipal.rc" />
+    <ClInclude Include="CheckForError.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
