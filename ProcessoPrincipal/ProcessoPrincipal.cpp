@@ -1,21 +1,20 @@
-#define WIN32_LEAN_AND_MEAN 
-
 #include <Windows.h>
 #include <stdio.h>
 #include <string>
 #include <conio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <process.h>
+
+// Constantes
+static const int ESC = 27;
+static const int MAX_MSG = 50;
 
 // Utilitários
 #define _CHECKERROR    1        // Ativa função CheckForError
 #include "CheckForError.h"
 typedef unsigned (WINAPI* CAST_FUNCTION)(LPVOID);
 typedef unsigned* CAST_LPDWORD;
-
-// Constantes
-static const int ESC = 27;
-static const int MAX_MSG = 50;
 
 // Cores e ferramentas para Console
 #define CCRED   FOREGROUND_RED   | FOREGROUND_INTENSITY
@@ -26,10 +25,27 @@ HANDLE hOut;
 CRITICAL_SECTION csConsole;
 
 // Funções e Threads
+void WINAPI ThreadLeituraTeclado(void*);
 void WINAPI ThreadLeituraDados(void*);
 
-double RandReal(double min, double max) {
+double RandReal(double min, double max) 
+{
     return min + double(rand()) / RAND_MAX * (max - min);
+}
+
+// printf colorido, e com exclusão mútua
+void cc_printf(const int color, const char* format, ...)
+{
+	char buf[512];
+	va_list args;
+	va_start(args, format);
+	vsprintf_s(buf, 512, format, args);
+	va_end(args);
+
+	EnterCriticalSection(&csConsole);
+	SetConsoleTextAttribute(hOut, color);
+	printf(buf);
+	LeaveCriticalSection(&csConsole);
 }
 
 // Globais
@@ -38,6 +54,7 @@ char key;
 int main()
 {
     HANDLE hThreadLeituraDados;
+    HANDLE hThreadLeituraTeclado;
     unsigned dwThreadId;
 
     hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -48,51 +65,52 @@ int main()
 
     InitializeCriticalSection(&csConsole);
 
-    hThreadLeituraDados = (HANDLE)_beginthreadex(
+    hThreadLeituraTeclado = (HANDLE)_beginthreadex(
         NULL,
         0,
-        (CAST_FUNCTION) ThreadLeituraDados,
+        (CAST_FUNCTION) ThreadLeituraTeclado,
         (LPVOID) NULL,
         0,
         (CAST_LPDWORD) & dwThreadId
     );
-    if (hThreadLeituraDados) {
-		EnterCriticalSection(&csConsole);
-		SetConsoleTextAttribute(hOut, CCWHITE);
-		printf("Thread Leitura de Dados criada\n");
-		LeaveCriticalSection(&csConsole);
-    }
-    else {
-		EnterCriticalSection(&csConsole);
-		SetConsoleTextAttribute(hOut, CCRED);
-		printf("Erro na criação da thread Leitura de Dados!\n");
-		LeaveCriticalSection(&csConsole);
+    if (hThreadLeituraTeclado) {
+		cc_printf(CCWHITE, "Thread Leitura de Dados criada\n");
+    } else {
+		cc_printf(CCRED, "Erro na criação da thread Leitura de Dados!\n");
         exit(0);
     }
 
-    do {
-        key = _getch();
-        if (key == 'c')
-            system("CLS");
+    WaitForSingleObject(hThreadLeituraTeclado, INFINITE);
+    CloseHandle(hThreadLeituraTeclado);
 
-        if (key != ESC) {
-			EnterCriticalSection(&csConsole);
-			SetConsoleTextAttribute(hOut, CCBLUE);
-			printf("Tecla: %c\n", key);
-			LeaveCriticalSection(&csConsole);
-        }
-    } while (key != ESC);
+    cc_printf(CCRED, "Saindo da thread principal\n");
 
-    WaitForSingleObject(hThreadLeituraDados, INFINITE);
-    CloseHandle(hThreadLeituraDados);
-
-    EnterCriticalSection(&csConsole);
-    SetConsoleTextAttribute(hOut, CCRED);
-    printf("Saindo da thread principal\n");
-    LeaveCriticalSection(&csConsole);
-
-	SetConsoleTextAttribute(hOut, CCWHITE);
     exit(EXIT_SUCCESS);
+}
+
+void WINAPI ThreadLeituraTeclado(LPVOID tArgs) {
+	cc_printf(CCGREEN, "Thread teclado\n");
+
+   do {
+       key = _getch();
+
+       switch (key)
+       {
+       case 'c':
+           system("CLS");
+           break;
+       case ESC:
+			cc_printf(CCBLUE, "Tecla: ESC, fechando Threads\n");
+           break;
+       default:
+			cc_printf(CCBLUE, "Tecla: %c\n", key);
+           break;
+       }
+   } while (key != ESC);
+
+    cc_printf(CCRED, "Saindo da thread Leitura do Teclado\n");
+
+    _endthreadex(0);
 }
 
 void WINAPI ThreadLeituraDados(void* tArgs) {
