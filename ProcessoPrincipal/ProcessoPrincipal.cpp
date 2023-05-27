@@ -1,9 +1,17 @@
+#define WIN32_LEAN_AND_MEAN 
+
 #include <Windows.h>
 #include <stdio.h>
 #include <string>
 #include <conio.h>
 #include <stdlib.h>
 #include <process.h>
+
+// Utilitários
+#define _CHECKERROR    1        // Ativa função CheckForError
+#include "CheckForError.h"
+typedef unsigned (WINAPI* CAST_FUNCTION)(LPVOID);
+typedef unsigned* CAST_LPDWORD;
 
 // Constantes
 static const int ESC = 27;
@@ -18,7 +26,7 @@ HANDLE hOut;
 CRITICAL_SECTION csConsole;
 
 // Funções e Threads
-unsigned _stdcall ThreadLeituraDados(void*);
+void WINAPI ThreadLeituraDados(void*);
 
 double RandReal(double min, double max) {
     return min + double(rand()) / RAND_MAX * (max - min);
@@ -43,10 +51,10 @@ int main()
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
         0,
-        &ThreadLeituraDados,
-        NULL,
+        (CAST_FUNCTION) ThreadLeituraDados,
+        (LPVOID) NULL,
         0,
-        &dwThreadId
+        (CAST_LPDWORD) & dwThreadId
     );
     if (hThreadLeituraDados) {
 		EnterCriticalSection(&csConsole);
@@ -87,7 +95,7 @@ int main()
     exit(EXIT_SUCCESS);
 }
 
-unsigned _stdcall ThreadLeituraDados(void* tArgs) {
+void WINAPI ThreadLeituraDados(void* tArgs) {
     char msg[MAX_MSG];
 
 	int NSEQ = 1;
@@ -121,5 +129,4 @@ unsigned _stdcall ThreadLeituraDados(void* tArgs) {
     LeaveCriticalSection(&csConsole);
 
     _endthreadex(0);
-    return 0;
 }
