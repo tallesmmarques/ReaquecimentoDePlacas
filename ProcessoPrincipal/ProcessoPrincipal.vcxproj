@@ -129,6 +129,13 @@
   <ItemGroup>
     <ClCompile Include="ProcessoPrincipal.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="CheckForError.h" />
+    <ClInclude Include="resource.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="ProcessoPrincipal.rc" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
