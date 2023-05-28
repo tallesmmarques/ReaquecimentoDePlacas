@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <process.h>
+#include <math.h>
 
 // Constantes
 static const int ESC = 27;
@@ -119,7 +120,8 @@ int main()
     exit(EXIT_SUCCESS);
 }
 
-void WINAPI ThreadLeituraTeclado(LPVOID tArgs) {
+void WINAPI ThreadLeituraTeclado(LPVOID tArgs) 
+{
 	cc_printf(CCWHITE, "Thread Leitura do Teclado inicializada\n");
 
     char key;
@@ -133,12 +135,8 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs) {
            SetEvent(hBlockLeituraEvent);
            break;
        case ESC:
-			//cc_printf(CCWHITE, "Tecla: ESC, fechando Threads\n");
-            SetEvent(hTermLeituraEvent);
+           SetEvent(hTermLeituraEvent);
            break;
-   //    default:
-			//cc_printf(CCWHITE, "Tecla: %c\n", key);
-   //        break;
        }
    } while (key != ESC);
 
@@ -147,16 +145,85 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs) {
     _endthreadex(0);
 }
 
-void WINAPI ThreadLeituraDados(LPVOID tArgs) {
+void genDadosProcesso(char* msg)
+{
+	static int NSEQ = 1;
+
+    int TIPO = 55;
+    double T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO;
+    SYSTEMTIME TIMESTAMP;
+
+	T_ZONA_P = RandReal(700, 900);
+	T_ZONA_A = RandReal(901, 1200);
+	T_ZONA_E = RandReal(1201, 1400);
+	PRESSAO  = RandReal(10, 12);
+	GetLocalTime(&TIMESTAMP);
+
+    if (T_ZONA_A < 1000) // mantém a mensagem fixa em 42 caracteres
+    {
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$0%04.1f$%04.1f$%02.1f$%02d:%02d:%02d\n", 
+			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
+			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
+    }
+    else
+    {
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f$%02d:%02d:%02d\n", 
+			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
+			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
+    }
+
+	NSEQ = 1 + (NSEQ % 9999);
+}
+void genAlarme(char* msg)
+{
+	static int NSEQ = 1;
+
+    int TIPO = 99;
+    int CODIGO;
+    SYSTEMTIME TIMESTAMP;
+
+    CODIGO = round(RandReal(0, 99));
+	GetLocalTime(&TIMESTAMP);
+
+	sprintf_s(msg, MAX_MSG, "%04d$%02d$%02d$%02d:%02d:%02d\n", 
+		NSEQ, TIPO, CODIGO,
+		TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
+
+	NSEQ = 1 + (NSEQ % 9999);
+}
+void genDadosOtimizacao(char* msg) {
+	static int NSEQ = 1;
+
+    int TIPO = 01;
+    double T_ZONA_P, T_ZONA_A, T_ZONA_E;
+    SYSTEMTIME TIMESTAMP;
+
+	T_ZONA_P = RandReal(700, 900);
+	T_ZONA_A = RandReal(901, 1200);
+	T_ZONA_E = RandReal(1201, 1400);
+	GetLocalTime(&TIMESTAMP);
+
+    if (T_ZONA_A < 1000) // mantém a mensagem fixa em 42 caracteres
+    {
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$0%04.1f$%04.1f$%02d:%02d:%02d\n", 
+			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
+			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
+    }
+    else
+    {
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02d:%02d:%02d\n", 
+			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
+			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
+    }
+
+	NSEQ = 1 + (NSEQ % 9999);
+}
+void WINAPI ThreadLeituraDados(LPVOID tArgs)
+{
 	cc_printf(CCWHITE, "Thread Leitura de Dados inicializada\n");
 
     char msg[MAX_MSG];
     int timePeriod = 1; // período de 1 segundo
-
-	int NSEQ = 1;
-    int TIPO = 55;
-    double T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO;
-    SYSTEMTIME TIMESTAMP;
 
     HANDLE hEvents[2] = { hBlockLeituraEvent, hTermLeituraEvent };
     DWORD dwRet;
@@ -168,18 +235,14 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs) {
 
         if (dwRet == WAIT_TIMEOUT) 
         {
-			T_ZONA_P = RandReal(700, 900);
-			T_ZONA_A = RandReal(901, 1200);
-			T_ZONA_E = RandReal(1201, 1400);
-			PRESSAO  = RandReal(10, 12);
-			GetLocalTime(&TIMESTAMP);
-
-			sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f$%02d:%02d:%02d\n", 
-				NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
-				TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
-
+            genDadosProcesso(msg);
 			cc_printf(CCGREEN, msg);
-			NSEQ = (NSEQ + 1) % 10000;
+
+            genAlarme(msg);
+			cc_printf(CCGREEN, msg);
+
+            genDadosOtimizacao(msg);
+			cc_printf(CCGREEN, msg);
         }
         else if (numEvent == 0) // evento de bloqueio
         {
