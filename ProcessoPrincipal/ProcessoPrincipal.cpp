@@ -12,8 +12,8 @@
 #include "ListaCircular.h"
 
 // Constantes
-static const int ESC = 27;
-static const int MAX_MSG = 50;
+#define ESC 27
+#define MAX_MSG 50
 
 // Utilitários
 #define _CHECKERROR    1        // Ativa função CheckForError
@@ -131,6 +131,9 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
 
     char key;
 
+    int ret;
+    char buf[MAX_MSG];
+
    do {
        key = _getch();
 
@@ -143,13 +146,41 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
            EnterCriticalSection(&csConsole);
            SetConsoleTextAttribute(hOut, CCGREEN);
 
+           printf("pri: %d, ult: %d\n", listaCircular.primeiro_processo, listaCircular.ultimo_processo);
+
            for (int i = 0; i < 5; i++)
            {
-               printf("[%d] %s\n", i, listaCircular.memoria[i].msg.c_str());
+               printf("[%d] %s\n", i, listaCircular.memoria_processo[i].msg.c_str());
            }
+
+           SetConsoleTextAttribute(hOut, CCRED);
+           ret = listaCircular.lerDadoProcesso(buf);
+           if (ret == MEMORY_EMPTY)
+               printf("memoria vazia\n");
+           else 
+               printf("-> %s\n", buf);
 
            LeaveCriticalSection(&csConsole);
            break;
+       //case 'k':
+       //    EnterCriticalSection(&csConsole);
+       //    SetConsoleTextAttribute(hOut, CCGREEN);
+
+       //    printf("pri: %d, ult: %d\n", listaCircular.primeiro_processo, listaCircular.ultimo_processo);
+
+       //    for (int i = 0; i < 5; i++)
+       //    {
+       //        printf("[%d] %s\n", i, listaCircular.memoria_processo[i].msg.c_str());
+       //    }
+
+       //    ret = listaCircular.lerDadoProcesso(buf);
+       //    if (ret == MEMORY_EMPTY)
+       //        printf("memoria vazia\n");
+       //    else 
+       //        printf("-> %s\n", buf);
+
+       //    LeaveCriticalSection(&csConsole);
+       //    break;
        case ESC:
            SetEvent(hTermLeituraEvent);
            break;
@@ -239,11 +270,12 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 	cc_printf(CCWHITE, "Thread Leitura de Dados inicializada\n");
 
     char msg[MAX_MSG];
-    int timePeriod = 1; // período de 1 segundo
+    int timePeriod = 2; // período de 1 segundo
 
     HANDLE hEvents[2] = { hBlockLeituraEvent, hTermLeituraEvent };
     DWORD dwRet;
     DWORD numEvent;
+    int memoria_ret;
 
 	do {
         dwRet = WaitForMultipleObjects(2, hEvents, FALSE, 1000*timePeriod);
@@ -252,8 +284,8 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
         if (dwRet == WAIT_TIMEOUT) 
         {
             genDadosProcesso(msg);
-            listaCircular.guardarDadoProcesso(msg);
-            cc_printf(CCGREEN, "Dado de processo gerado\n");
+            memoria_ret = listaCircular.guardarDadoProcesso(msg);
+            cc_printf(CCBLUE, "Dado de processo gerado - %d\n", memoria_ret);
 
             genAlarme(msg);
 			//cc_printf(CCGREEN, msg);
