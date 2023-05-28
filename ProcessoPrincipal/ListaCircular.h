@@ -11,12 +11,6 @@
 #define MAX_MSG 50
 #endif
 
-typedef struct Node
-{
-	std::string msg;
-	int next;
-}Node_t;
-
 class ListaCircular
 {
 public:
