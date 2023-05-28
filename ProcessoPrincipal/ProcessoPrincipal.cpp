@@ -34,6 +34,7 @@ CRITICAL_SECTION csConsole;
 // Funções, Threads e Eventos
 void WINAPI ThreadLeituraTeclado(LPVOID);
 void WINAPI ThreadLeituraDados(LPVOID);
+void WINAPI ThreadLeituraDadosAlarmes(LPVOID);
 
 double RandReal(double min, double max) 
 {
@@ -67,7 +68,6 @@ int main()
 {
     HANDLE hThreadLeituraDados;
     HANDLE hThreadLeituraTeclado;
-    unsigned dwThreadId;
 
     setlocale(LC_ALL, "Portuguese");
 
@@ -95,7 +95,7 @@ int main()
         (CAST_FUNCTION) ThreadLeituraDados,
         (LPVOID) NULL,
         0,
-        (CAST_LPDWORD) & dwThreadId
+        (CAST_LPDWORD) NULL
     );
     if (hThreadLeituraDados) {
 		cc_printf(CCWHITE, "Thread Leitura de Dados criada\n");
@@ -110,7 +110,7 @@ int main()
         (CAST_FUNCTION) ThreadLeituraTeclado,
         (LPVOID) NULL,
         0,
-        (CAST_LPDWORD) & dwThreadId
+        (CAST_LPDWORD) NULL
     );
     if (hThreadLeituraTeclado) {
 		cc_printf(CCWHITE, "Thread Leitura do Teclado criada\n");
@@ -260,9 +260,25 @@ void genDadosOtimizacao(char* msg) {
 
 	NSEQ = 1 + (NSEQ % 9999);
 }
+
 void WINAPI ThreadLeituraDados(LPVOID tArgs)
 {
 	cc_printf(CCWHITE, "Thread Leitura de Dados inicializada\n");
+
+    HANDLE hThreadLeituraDadosAlarme = (HANDLE)_beginthreadex(
+        NULL,
+        0,
+        (CAST_FUNCTION) ThreadLeituraDadosAlarmes,
+        (LPVOID) NULL,
+        0,
+        (CAST_LPDWORD) NULL
+    );
+    if (hThreadLeituraDadosAlarme) {
+		cc_printf(CCWHITE, "Thread Leitura de Dados para Alarmes criada\n");
+    } else {
+		cc_printf(CCRED, "Erro na criação da thread Leitura de Dados para Alarmes!\n");
+        exit(0);
+    }
 
     char msg[MAX_MSG];
     int timePeriod = 1; // período de 1 segundo
@@ -312,7 +328,7 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
                 if (numEvent == 1) break;
             }
-			cc_printf(CCBLUE, "Dado de processo armazenado - %d\n", memoria_ret);
+			cc_printf(CCBLUE, "Dado de processo armazenado - status: %d\n", memoria_ret);
 
             // Mensagem de Dados de Otimização ------------------------------------------
 		    genDadosOtimizacao(msg);
@@ -348,9 +364,7 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
                 if (numEvent == 1) break;
             }
-			cc_printf(CCBLUE, "Dado de otimizacao armazenado - %d\n", memoria_ret);
-
-            //genAlarme(msg);
+			cc_printf(CCBLUE, "Dado de otimizacao armazenado - status: %d\n", memoria_ret);
         }
 
         if (numEvent == 0) // evento de bloqueio
@@ -367,9 +381,50 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 			}
         }
     } while (numEvent != 1); // loop até evento TermLeitura 
-	ResetEvent(hTermLeituraEvent);
 
+    WaitForSingleObject(hThreadLeituraDadosAlarme, INFINITE);
+
+	ResetEvent(hTermLeituraEvent);
     cc_printf(CCRED, "Saindo da thread Leitura de Dados\n");
 
+    _endthreadex(0);
+}
+
+void WINAPI ThreadLeituraDadosAlarmes(LPVOID)
+{
+	cc_printf(CCWHITE, "Thread Leitura de Dados de Alarme inicializada\n");
+
+    char msg[MAX_MSG];
+    int timePeriod = 1; // período de 1 segundo
+
+    HANDLE hEvents[2] = { hBlockLeituraEvent, hTermLeituraEvent };
+    DWORD dwRet;
+    DWORD numEvent;
+
+    do {
+        dwRet = WaitForMultipleObjects(2, hEvents, FALSE, 1000*timePeriod);
+        numEvent = dwRet - WAIT_OBJECT_0;
+
+        if (dwRet == WAIT_TIMEOUT)
+        {
+            genAlarme(msg);
+            cc_printf(CCRED, "[Alarme] %s\n", msg);
+        }
+        else if (numEvent == 0) // evento de bloqueio
+        {
+			ResetEvent(hBlockLeituraEvent);
+
+			//cc_printf(CCBLUE, "Tarefa de leitura de dados bloqueada\n");
+			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+			numEvent = dwRet - WAIT_OBJECT_0;
+			if (numEvent == 0)
+			{
+				ResetEvent(hBlockLeituraEvent);
+				//cc_printf(CCBLUE, "Tarefa de leitura de dados desbloqueada\n");
+			}
+        }
+    } while (numEvent != 1);
+
+    cc_printf(CCRED, "Saindo da thread Leitura de Dados de Alarme\n");
     _endthreadex(0);
 }
