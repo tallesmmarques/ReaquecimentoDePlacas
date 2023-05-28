@@ -9,6 +9,8 @@
 #include <process.h>
 #include <math.h>
 
+#include "ListaCircular.h"
+
 // Constantes
 static const int ESC = 27;
 static const int MAX_MSG = 50;
@@ -54,6 +56,9 @@ void cc_printf(const int color, const char* format, ...)
 
 HANDLE hBlockLeituraEvent;
 HANDLE hTermLeituraEvent;
+
+// Globais
+ListaCircular listaCircular;
 
 int main()
 {
@@ -134,6 +139,17 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
        case 'd':
            SetEvent(hBlockLeituraEvent);
            break;
+       case 'l':
+           EnterCriticalSection(&csConsole);
+           SetConsoleTextAttribute(hOut, CCGREEN);
+
+           for (int i = 0; i < 5; i++)
+           {
+               printf("[%d] %s\n", i, listaCircular.memoria[i].msg.c_str());
+           }
+
+           LeaveCriticalSection(&csConsole);
+           break;
        case ESC:
            SetEvent(hTermLeituraEvent);
            break;
@@ -161,13 +177,13 @@ void genDadosProcesso(char* msg)
 
     if (T_ZONA_A < 1000) // mantém a mensagem fixa em 42 caracteres
     {
-		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$0%04.1f$%04.1f$%02.1f$%02d:%02d:%02d\n", 
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$0%04.1f$%04.1f$%02.1f$%02d:%02d:%02d", 
 			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
     else
     {
-		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f$%02d:%02d:%02d\n", 
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f$%02d:%02d:%02d", 
 			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
@@ -185,7 +201,7 @@ void genAlarme(char* msg)
     CODIGO = round(RandReal(0, 99));
 	GetLocalTime(&TIMESTAMP);
 
-	sprintf_s(msg, MAX_MSG, "%04d$%02d$%02d$%02d:%02d:%02d\n", 
+	sprintf_s(msg, MAX_MSG, "%04d$%02d$%02d$%02d:%02d:%02d", 
 		NSEQ, TIPO, CODIGO,
 		TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
 
@@ -205,13 +221,13 @@ void genDadosOtimizacao(char* msg) {
 
     if (T_ZONA_A < 1000) // mantém a mensagem fixa em 42 caracteres
     {
-		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$0%04.1f$%04.1f$%02d:%02d:%02d\n", 
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$0%04.1f$%04.1f$%02d:%02d:%02d", 
 			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
     else
     {
-		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02d:%02d:%02d\n", 
+		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02d:%02d:%02d", 
 			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
@@ -236,13 +252,14 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
         if (dwRet == WAIT_TIMEOUT) 
         {
             genDadosProcesso(msg);
-			cc_printf(CCGREEN, msg);
+            listaCircular.guardarDadoProcesso(msg);
+            cc_printf(CCGREEN, "Dado de processo gerado\n");
 
             genAlarme(msg);
-			cc_printf(CCGREEN, msg);
+			//cc_printf(CCGREEN, msg);
 
             genDadosOtimizacao(msg);
-			cc_printf(CCGREEN, msg);
+			//cc_printf(CCGREEN, msg);
         }
         else if (numEvent == 0) // evento de bloqueio
         {
