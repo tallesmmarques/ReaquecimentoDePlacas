@@ -15,22 +15,11 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="ProcessoPrincipal.cpp">
-      <Filter>Arquivos de Origem</Filter>
-    </ClCompile>
-    <ClCompile Include="ListaCircular.cpp">
+    <ClCompile Include="ProcessoExOtimizacao.cpp">
       <Filter>Arquivos de Origem</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="ProcessoPrincipal.rc">
-      <Filter>Arquivos de Recurso</Filter>
-    </ResourceCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="ListaCircular.h">
-      <Filter>Arquivos de Cabeçalho</Filter>
-    </ClInclude>
     <ClInclude Include="CheckForError.h">
       <Filter>Arquivos de Cabeçalho</Filter>
     </ClInclude>

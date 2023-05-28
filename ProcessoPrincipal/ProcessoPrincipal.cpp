@@ -117,6 +117,46 @@ int main()
     hClearConsoleEvent = CreateEvent(NULL, TRUE, FALSE, "ClearConsoleEvent");
     CheckForError(hClearConsoleEvent);
 
+    DWORD status;
+
+	STARTUPINFO siExP;
+    PROCESS_INFORMATION piExP;
+
+    ZeroMemory(&siExP, sizeof(siExP));
+    siExP.cb = sizeof(siExP);
+    ZeroMemory(&piExP, sizeof(piExP));
+    status = CreateProcess(
+        NULL,
+        "ProcessoExProcesso.exe",
+        NULL,
+        NULL,
+        TRUE,
+        CREATE_NEW_CONSOLE,
+        NULL,
+        NULL,
+        &siExP,
+        &piExP
+    );
+
+	STARTUPINFO siExO;
+    PROCESS_INFORMATION piExO;
+
+    ZeroMemory(&siExO, sizeof(siExO));
+    siExO.cb = sizeof(siExO);
+    ZeroMemory(&piExO, sizeof(piExO));
+    status = CreateProcess(
+        NULL,
+        "ProcessoExOtimizacao.exe",
+        NULL,
+        NULL,
+        TRUE,
+        CREATE_NEW_CONSOLE,
+        NULL,
+        NULL,
+        &siExO,
+        &piExO
+    );
+
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
         0,
@@ -178,6 +218,22 @@ int main()
     }
 
     DWORD dwRet;
+
+    const DWORD numProcess = 2;
+    HANDLE hProcess[numProcess];
+    hProcess[0] = piExP.hProcess;
+    hProcess[1] = piExO.hProcess;
+
+    dwRet = WaitForMultipleObjects(numProcess, hProcess, TRUE, INFINITE);
+    CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numProcess));
+    cc_printf(CCRED, "[S] Processo Exibicao de Dados de Processo encerrado \n");
+    cc_printf(CCRED, "[S] Processo Exibicao de Dados de Otimizacao encerrado \n");
+
+    CloseHandle(piExP.hProcess);
+    CloseHandle(piExP.hThread);
+    CloseHandle(piExO.hProcess);
+    CloseHandle(piExO.hThread);
+
     const DWORD numThreads = 4;
     HANDLE hThreads[numThreads];
     hThreads[0] = hThreadLeituraDados;
@@ -576,24 +632,3 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
     _endthreadex(0);
 }
 
-
-//void WINAPI ThreadExibicaoProcesso(LPVOID)
-//{
-//	cc_printf(CCWHITE, "[I] Thread Exibicao de Dados de Processo inicializada\n");
-//
-//    Sleep(5000);
-//
-//    cc_printf(CCRED, "[S] Saindo da thread Exibicao de Dados de Processo\n");
-//
-//    _endthreadex(0);
-//}
-//
-//void WINAPI ThreadExibicaoOtimizacao(LPVOID);
-//{
-//	cc_printf(CCWHITE, "[I] Thread Exibicao de Dados de Otimizacao inicializada\n");
-//
-//    Sleep(5000);
-//
-//    cc_printf(CCRED, "[S] Saindo da thread Exibicao de Dados de Otimizacao\n");
-//    _endthreadex(0);
-//}
