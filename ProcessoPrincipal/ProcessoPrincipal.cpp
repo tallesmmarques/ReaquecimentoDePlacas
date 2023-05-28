@@ -148,9 +148,9 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
 
            printf("pri: %d, ult: %d\n", listaCircular.primeiro_processo, listaCircular.ultimo_processo);
 
-           for (int i = 0; i < 5; i++)
+           for (int i = 0; i < MAX_DADOS; i++)
            {
-               printf("[%d] %s\n", i, listaCircular.memoria_processo[i].msg.c_str());
+               printf("[%d] %s\n", i, listaCircular.memoria_processo[i].c_str());
            }
 
            SetConsoleTextAttribute(hOut, CCRED);
@@ -162,25 +162,26 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
 
            LeaveCriticalSection(&csConsole);
            break;
-       //case 'k':
-       //    EnterCriticalSection(&csConsole);
-       //    SetConsoleTextAttribute(hOut, CCGREEN);
+       case 'k':
+           EnterCriticalSection(&csConsole);
+           SetConsoleTextAttribute(hOut, CCBLUE);
 
-       //    printf("pri: %d, ult: %d\n", listaCircular.primeiro_processo, listaCircular.ultimo_processo);
+           printf("pri: %d, ult: %d\n", listaCircular.primeiro_otimizacao, listaCircular.ultimo_otimizacao);
 
-       //    for (int i = 0; i < 5; i++)
-       //    {
-       //        printf("[%d] %s\n", i, listaCircular.memoria_processo[i].msg.c_str());
-       //    }
+           for (int i = 0; i < MAX_DADOS; i++)
+           {
+               printf("{%d} %s\n", i, listaCircular.memoria_otimizacao[i].c_str());
+           }
 
-       //    ret = listaCircular.lerDadoProcesso(buf);
-       //    if (ret == MEMORY_EMPTY)
-       //        printf("memoria vazia\n");
-       //    else 
-       //        printf("-> %s\n", buf);
+           SetConsoleTextAttribute(hOut, CCRED);
+           ret = listaCircular.lerDadoOtimizacao(buf);
+           if (ret == MEMORY_EMPTY)
+               printf("memoria vazia\n");
+           else 
+               printf("-* %s\n", buf);
 
-       //    LeaveCriticalSection(&csConsole);
-       //    break;
+           LeaveCriticalSection(&csConsole);
+           break;
        case ESC:
            SetEvent(hTermLeituraEvent);
            break;
@@ -288,7 +289,8 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
             cc_printf(CCBLUE, "Dado de processo gerado - %d\n", memoria_ret);
 
             genAlarme(msg);
-			//cc_printf(CCGREEN, msg);
+            memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
+            cc_printf(CCBLUE, "Dado de otimizacao gerado - %d\n", memoria_ret);
 
             genDadosOtimizacao(msg);
 			//cc_printf(CCGREEN, msg);
