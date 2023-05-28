@@ -57,6 +57,8 @@ void cc_printf(const int color, const char* format, ...)
 
 HANDLE hBlockLeituraEvent;
 HANDLE hTermLeituraEvent;
+HANDLE hSemMemoriaLeitura;
+HANDLE hNovosDadosProcessoEvent;
 
 // Globais
 ListaCircular listaCircular;
@@ -81,6 +83,11 @@ int main()
     CheckForError(hBlockLeituraEvent);
     hTermLeituraEvent = CreateEvent(NULL, TRUE, FALSE, "TermLeituraEvent");
     CheckForError(hTermLeituraEvent);
+
+    hSemMemoriaLeitura = CreateSemaphore(NULL, MAX_DADOS, MAX_DADOS, "MemoriaLeitura");
+    CheckForError(hSemMemoriaLeitura);
+    hNovosDadosProcessoEvent = CreateEvent(NULL, TRUE, FALSE, "NovosDadosEvent");
+    CheckForError(hNovosDadosProcessoEvent);
 
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
@@ -149,8 +156,11 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
            ret = listaCircular.lerDadoProcesso(buf);
            if (ret == MEMORY_EMPTY)
                cc_printf(CCBLUE, "Nao ha dados de processos disponiveis\n");
-           else 
+           else
+           {
                cc_printf(CCBLUE, "%s\n", buf);
+               ReleaseSemaphore(hSemMemoriaLeitura, 1, NULL);
+           }
 
            break;
        case 'k':
@@ -159,8 +169,11 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
            {
                cc_printf(CCBLUE, "Nao ha dados de otimizacao disponiveis\n");
            }
-           else 
+           else
+           {
                cc_printf(CCBLUE, "%s\n", buf);
+               ReleaseSemaphore(hSemMemoriaLeitura, 1, NULL);
+           }
 
            break;
        case ESC:
@@ -252,9 +265,9 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 	cc_printf(CCWHITE, "Thread Leitura de Dados inicializada\n");
 
     char msg[MAX_MSG];
-    int timePeriod = 2; // período de 1 segundo
+    int timePeriod = 1; // período de 1 segundo
 
-    HANDLE hEvents[2] = { hBlockLeituraEvent, hTermLeituraEvent };
+    HANDLE hEvents[3] = { hBlockLeituraEvent, hTermLeituraEvent, hSemMemoriaLeitura };
     DWORD dwRet;
     DWORD numEvent;
     int memoria_ret;
@@ -265,18 +278,30 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
         if (dwRet == WAIT_TIMEOUT) 
         {
-            genDadosProcesso(msg);
-            memoria_ret = listaCircular.guardarDadoProcesso(msg);
-            cc_printf(CCBLUE, "Dado de processo gerado - %d\n", memoria_ret);
+            dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+			numEvent = dwRet - WAIT_OBJECT_0;
 
-            genAlarme(msg);
-            memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
-            cc_printf(CCBLUE, "Dado de otimizacao gerado - %d\n", memoria_ret);
+            if (numEvent == 2) // há espaço na memória
+            {
+				genDadosProcesso(msg);
+				memoria_ret = listaCircular.guardarDadoProcesso(msg);
+				cc_printf(CCBLUE, "Dado de processo gerado - %d\n", memoria_ret);
 
-            genDadosOtimizacao(msg);
-			//cc_printf(CCGREEN, msg);
+				dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+				numEvent = dwRet - WAIT_OBJECT_0;
+            }
+
+            if (numEvent == 2) // há espaço na memória
+            {
+				genDadosOtimizacao(msg);
+				memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
+				cc_printf(CCBLUE, "Dado de otimizacao gerado - %d\n", memoria_ret);
+            }
+
+            //genAlarme(msg);
         }
-        else if (numEvent == 0) // evento de bloqueio
+
+        if (numEvent == 0) // evento de bloqueio
         {
 			ResetEvent(hBlockLeituraEvent);
 
