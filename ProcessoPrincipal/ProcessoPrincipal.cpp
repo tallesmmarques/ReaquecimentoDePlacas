@@ -220,6 +220,15 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
        case 'p':
            SetEvent(hBlockCapOtimizacaoEvent);
            break;
+       case 'q':
+           SetEvent(hBlockExProcessoEvent);
+           break;
+       case 's':
+           SetEvent(hBlockExOtimizacaoEvent);
+           break;
+       case 'x':
+           SetEvent(hClearConsoleEvent);
+           break;
        case ESC:
            SetEvent(hTerminateEvent);
            break;
