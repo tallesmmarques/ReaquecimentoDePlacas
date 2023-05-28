@@ -65,6 +65,10 @@ HANDLE hTerminateEvent;
 HANDLE hBlockLeituraEvent;
 HANDLE hBlockCapProcessoEvent;
 HANDLE hBlockCapOtimizacaoEvent;
+HANDLE hBlockExProcessoEvent;
+HANDLE hBlockExOtimizacaoEvent;
+
+HANDLE hClearConsoleEvent;
 
 HANDLE hSemMemoriaLeitura;
 HANDLE hNovosDadosProcessoEvent;
@@ -98,6 +102,10 @@ int main()
     CheckForError(hBlockCapProcessoEvent);
     hBlockCapOtimizacaoEvent = CreateEvent(NULL, TRUE, FALSE, "BlockCapOtimizacaoEvent");
     CheckForError(hBlockCapOtimizacaoEvent);
+    hBlockExProcessoEvent = CreateEvent(NULL, TRUE, FALSE, "BlockExProcessoEvent");
+    CheckForError(hBlockExProcessoEvent);
+    hBlockExOtimizacaoEvent = CreateEvent(NULL, TRUE, FALSE, "BlockExOtimizacaoEvent");
+    CheckForError(hBlockExOtimizacaoEvent);
 
     hSemMemoriaLeitura = CreateSemaphore(NULL, 0, 1, "MemoriaLeitura");
     CheckForError(hSemMemoriaLeitura);
@@ -105,6 +113,9 @@ int main()
     CheckForError(hNovosDadosProcessoEvent);
     hNovosDadosOtimizacaoEvent = CreateEvent(NULL, TRUE, FALSE, "NovosDadosOtimizacaoEvent");
     CheckForError(hNovosDadosOtimizacaoEvent);
+
+    hClearConsoleEvent = CreateEvent(NULL, TRUE, FALSE, "ClearConsoleEvent");
+    CheckForError(hClearConsoleEvent);
 
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
@@ -167,16 +178,20 @@ int main()
     }
 
     DWORD dwRet;
-    const DWORD numThreads = 2;
+    const DWORD numThreads = 4;
     HANDLE hThreads[numThreads];
     hThreads[0] = hThreadLeituraDados;
     hThreads[1] = hThreadLeituraTeclado;
+    hThreads[2] = hThreadCapturaProcesso;
+    hThreads[3] = hThreadCapturaOtimizacao;
 
     dwRet = WaitForMultipleObjects(numThreads, hThreads, TRUE, INFINITE);
     CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numThreads));
 
     CloseHandle(hThreadLeituraDados);
     CloseHandle(hThreadLeituraTeclado);
+    CloseHandle(hThreadCapturaProcesso);
+    CloseHandle(hThreadCapturaOtimizacao);
 
     cc_printf(CCRED, "[S] Saindo da thread Principal\n");
     exit(EXIT_SUCCESS);
@@ -414,6 +429,7 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
     } while (numEvent != 1); // loop até evento TermLeitura 
 
     WaitForSingleObject(hThreadLeituraDadosAlarme, INFINITE);
+    CloseHandle(hThreadLeituraDadosAlarme);
 
     cc_printf(CCRED, "[S] Saindo da thread Leitura de Dados\n");
 
@@ -550,3 +566,25 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
     cc_printf(CCRED, "[S] Saindo da thread Captura de Dados de Otimizacao\n");
     _endthreadex(0);
 }
+
+
+//void WINAPI ThreadExibicaoProcesso(LPVOID)
+//{
+//	cc_printf(CCWHITE, "[I] Thread Exibicao de Dados de Processo inicializada\n");
+//
+//    Sleep(5000);
+//
+//    cc_printf(CCRED, "[S] Saindo da thread Exibicao de Dados de Processo\n");
+//
+//    _endthreadex(0);
+//}
+//
+//void WINAPI ThreadExibicaoOtimizacao(LPVOID);
+//{
+//	cc_printf(CCWHITE, "[I] Thread Exibicao de Dados de Otimizacao inicializada\n");
+//
+//    Sleep(5000);
+//
+//    cc_printf(CCRED, "[S] Saindo da thread Exibicao de Dados de Otimizacao\n");
+//    _endthreadex(0);
+//}
