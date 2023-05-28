@@ -76,29 +76,34 @@ int main()
 	HANDLE hEvents[3] = { hBlockExOtimizacaoEvent, hTerminateEvent, hClearConsoleEvent };
     DWORD dwRet, numEvent;
     
+    BOOL bloqueada = FALSE;
     do {
-        dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-        ResetEvent(hBlockExOtimizacaoEvent);
-		CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + 1));
-        numEvent = dwRet - WAIT_OBJECT_0;
+		dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+		numEvent = dwRet - WAIT_OBJECT_0;
 
-        if (numEvent == 0) // bloqueio
+        if (bloqueada && numEvent == 0) // desbloqueio
         {
 			ResetEvent(hBlockExOtimizacaoEvent);
-
-			cc_printf(CCWHITE, "Tarefa de Exibicao de Dados de Otimizacao bloqueada\n");
-			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-			numEvent = dwRet - WAIT_OBJECT_0;
-			if (numEvent == 0)
-			{
-				ResetEvent(hBlockExOtimizacaoEvent);
-				cc_printf(CCWHITE, "Tarefa de Exibicao de Dados de Otimizacao desbloqueada\n");
-			}
+			bloqueada = FALSE;
+			cc_printf(CCWHITE, "Tarefa de Exibicao de Dados de Otimizacao desbloqueada\n");
         }
+        else if (!bloqueada && numEvent == 0) // bloqueio
+        {
+			ResetEvent(hBlockExOtimizacaoEvent);
+			bloqueada = TRUE;
+			cc_printf(CCWHITE, "Tarefa de Exibicao de Dados de Otimizacao bloqueada\n");
+        }
+
+        if (numEvent == 2) // limpar terminal
+		{
+            ResetEvent(hClearConsoleEvent);
+            system("cls");
+		}
     } while (numEvent != 1); // ESC precionado no terminal principal
 
     CloseHandle(hBlockExOtimizacaoEvent);
     CloseHandle(hTerminateEvent);
+    CloseHandle(hClearConsoleEvent);
 
     cc_printf(CCRED, "[S] Encerrando Processo de Exibicao de Dados de Otimizacao\n");
     exit(EXIT_SUCCESS);
