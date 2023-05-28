@@ -54,9 +54,6 @@ void cc_printf(const int color, const char* format, ...)
 HANDLE hBlockLeituraEvent;
 HANDLE hTermLeituraEvent;
 
-// Globais
-char key;
-
 int main()
 {
     HANDLE hThreadLeituraDados;
@@ -123,22 +120,25 @@ int main()
 }
 
 void WINAPI ThreadLeituraTeclado(LPVOID tArgs) {
-	cc_printf(CCGREEN, "Thread teclado\n");
+	cc_printf(CCWHITE, "Thread Leitura do Teclado inicializada\n");
+
+    char key;
 
    do {
        key = _getch();
 
        switch (key)
        {
-       case 'c':
-           system("CLS");
+       case 'd':
+           SetEvent(hBlockLeituraEvent);
            break;
        case ESC:
-			cc_printf(CCBLUE, "Tecla: ESC, fechando Threads\n");
+			//cc_printf(CCWHITE, "Tecla: ESC, fechando Threads\n");
+            SetEvent(hTermLeituraEvent);
            break;
-       default:
-			cc_printf(CCBLUE, "Tecla: %c\n", key);
-           break;
+   //    default:
+			//cc_printf(CCWHITE, "Tecla: %c\n", key);
+   //        break;
        }
    } while (key != ESC);
 
@@ -148,29 +148,54 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs) {
 }
 
 void WINAPI ThreadLeituraDados(LPVOID tArgs) {
+	cc_printf(CCWHITE, "Thread Leitura de Dados inicializada\n");
+
     char msg[MAX_MSG];
+    int timePeriod = 1; // período de 1 segundo
 
 	int NSEQ = 1;
     int TIPO = 55;
     double T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO;
     SYSTEMTIME TIMESTAMP;
 
+    HANDLE hEvents[2] = { hBlockLeituraEvent, hTermLeituraEvent };
+    DWORD dwRet;
+    DWORD numEvent;
+
 	do {
-        T_ZONA_P = RandReal(700, 900);
-        T_ZONA_A = RandReal(901, 1200);
-        T_ZONA_E = RandReal(1201, 1400);
-        PRESSAO  = RandReal(10, 12);
-        GetLocalTime(&TIMESTAMP);
+        dwRet = WaitForMultipleObjects(2, hEvents, FALSE, 1000*timePeriod);
+		numEvent = dwRet - WAIT_OBJECT_0;
 
-		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f$%02d:%02d:%02d\n", 
-            NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
-            TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
+        if (dwRet == WAIT_TIMEOUT) 
+        {
+			T_ZONA_P = RandReal(700, 900);
+			T_ZONA_A = RandReal(901, 1200);
+			T_ZONA_E = RandReal(1201, 1400);
+			PRESSAO  = RandReal(10, 12);
+			GetLocalTime(&TIMESTAMP);
 
-        cc_printf(CCGREEN, msg);
+			sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f$%02d:%02d:%02d\n", 
+				NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
+				TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
 
-        Sleep(1000);
-        NSEQ = (NSEQ + 1) % 10000;
-    } while (key != ESC);
+			cc_printf(CCGREEN, msg);
+			NSEQ = (NSEQ + 1) % 10000;
+        }
+        else if (numEvent == 0) // evento de bloqueio
+        {
+			ResetEvent(hBlockLeituraEvent);
+
+			cc_printf(CCBLUE, "Tarefa de leitura de dados bloqueada\n");
+			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+			numEvent = dwRet - WAIT_OBJECT_0;
+			if (numEvent == 0)
+			{
+				ResetEvent(hBlockLeituraEvent);
+				cc_printf(CCBLUE, "Tarefa de leitura de dados desbloqueada\n");
+			}
+        }
+    } while (numEvent != 1); // loop até evento TermLeitura 
+	ResetEvent(hTermLeituraEvent);
 
     cc_printf(CCRED, "Saindo da thread Leitura de Dados\n");
 
