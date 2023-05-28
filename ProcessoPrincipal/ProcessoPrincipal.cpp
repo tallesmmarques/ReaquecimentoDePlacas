@@ -8,6 +8,7 @@
 #include <stdarg.h>
 #include <process.h>
 #include <math.h>
+#include <locale.h>
 
 #include "ListaCircular.h"
 
@@ -65,6 +66,8 @@ int main()
     HANDLE hThreadLeituraDados;
     HANDLE hThreadLeituraTeclado;
     unsigned dwThreadId;
+
+    setlocale(LC_ALL, "Portuguese");
 
     hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
@@ -143,44 +146,22 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
            SetEvent(hBlockLeituraEvent);
            break;
        case 'l':
-           EnterCriticalSection(&csConsole);
-           SetConsoleTextAttribute(hOut, CCGREEN);
-
-           printf("pri: %d, ult: %d\n", listaCircular.primeiro_processo, listaCircular.ultimo_processo);
-
-           for (int i = 0; i < MAX_DADOS; i++)
-           {
-               printf("[%d] %s\n", i, listaCircular.memoria_processo[i].c_str());
-           }
-
-           SetConsoleTextAttribute(hOut, CCRED);
            ret = listaCircular.lerDadoProcesso(buf);
            if (ret == MEMORY_EMPTY)
-               printf("memoria vazia\n");
+               cc_printf(CCBLUE, "Nao ha dados de processos disponiveis\n");
            else 
-               printf("-> %s\n", buf);
+               cc_printf(CCBLUE, "%s\n", buf);
 
-           LeaveCriticalSection(&csConsole);
            break;
        case 'k':
-           EnterCriticalSection(&csConsole);
-           SetConsoleTextAttribute(hOut, CCBLUE);
-
-           printf("pri: %d, ult: %d\n", listaCircular.primeiro_otimizacao, listaCircular.ultimo_otimizacao);
-
-           for (int i = 0; i < MAX_DADOS; i++)
-           {
-               printf("{%d} %s\n", i, listaCircular.memoria_otimizacao[i].c_str());
-           }
-
-           SetConsoleTextAttribute(hOut, CCRED);
            ret = listaCircular.lerDadoOtimizacao(buf);
            if (ret == MEMORY_EMPTY)
-               printf("memoria vazia\n");
+           {
+               cc_printf(CCBLUE, "Nao ha dados de otimizacao disponiveis\n");
+           }
            else 
-               printf("-* %s\n", buf);
+               cc_printf(CCBLUE, "%s\n", buf);
 
-           LeaveCriticalSection(&csConsole);
            break;
        case ESC:
            SetEvent(hTermLeituraEvent);
