@@ -71,10 +71,10 @@ int main()
 
     InitializeCriticalSection(&csConsole);
 
-    hBlockLeituraEvent = CreateEvent(NULL, TRUE, FALSE, TEXT("BlockLeituraEvent"));
-    //CheckForError(hBlockLeituraEvent);
-    hTermLeituraEvent = CreateEvent(NULL, TRUE, FALSE, TEXT("TermLeituraEvent"));
-    //CheckForError(hTermLeituraEvent);
+    hBlockLeituraEvent = CreateEvent(NULL, TRUE, FALSE, "BlockLeituraEvent");
+    CheckForError(hBlockLeituraEvent);
+    hTermLeituraEvent = CreateEvent(NULL, TRUE, FALSE, "TermLeituraEvent");
+    CheckForError(hTermLeituraEvent);
 
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
@@ -113,12 +113,7 @@ int main()
     hThreads[1] = hThreadLeituraTeclado;
 
     dwRet = WaitForMultipleObjects(numThreads, hThreads, TRUE, INFINITE);
-    //CheckForError(dwRet == WAIT_OBJECT_0);
-
-    if (!((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numThreads)))
-    {
-        cc_printf(CCRED, "Erro no WaitForMultipleObjects da thread main\n");
-    }
+    CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numThreads));
 
     CloseHandle(hThreadLeituraDados);
     CloseHandle(hThreadLeituraTeclado);
