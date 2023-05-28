@@ -84,7 +84,7 @@ int main()
     hTermLeituraEvent = CreateEvent(NULL, TRUE, FALSE, "TermLeituraEvent");
     CheckForError(hTermLeituraEvent);
 
-    hSemMemoriaLeitura = CreateSemaphore(NULL, MAX_DADOS, MAX_DADOS, "MemoriaLeitura");
+    hSemMemoriaLeitura = CreateSemaphore(NULL, 0, 1, "MemoriaLeitura");
     CheckForError(hSemMemoriaLeitura);
     hNovosDadosProcessoEvent = CreateEvent(NULL, TRUE, FALSE, "NovosDadosEvent");
     CheckForError(hNovosDadosProcessoEvent);
@@ -155,10 +155,10 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
        case 'l':
            ret = listaCircular.lerDadoProcesso(buf);
            if (ret == MEMORY_EMPTY)
-               cc_printf(CCBLUE, "Nao ha dados de processos disponiveis\n");
+               cc_printf(CCRED, "Nao ha dados de processos disponiveis\n");
            else
            {
-               cc_printf(CCBLUE, "%s\n", buf);
+               cc_printf(CCGREEN, "%s\n", buf);
                ReleaseSemaphore(hSemMemoriaLeitura, 1, NULL);
            }
 
@@ -167,11 +167,11 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
            ret = listaCircular.lerDadoOtimizacao(buf);
            if (ret == MEMORY_EMPTY)
            {
-               cc_printf(CCBLUE, "Nao ha dados de otimizacao disponiveis\n");
+               cc_printf(CCRED, "Nao ha dados de otimizacao disponiveis\n");
            }
            else
            {
-               cc_printf(CCBLUE, "%s\n", buf);
+               cc_printf(CCGREEN, "%s\n", buf);
                ReleaseSemaphore(hSemMemoriaLeitura, 1, NULL);
            }
 
@@ -278,25 +278,77 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
         if (dwRet == WAIT_TIMEOUT) 
         {
-            dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-			numEvent = dwRet - WAIT_OBJECT_0;
+            // Mensagem de Dados de Processos -------------------------------------------
+		    genDadosProcesso(msg);
+			memoria_ret = listaCircular.guardarDadoProcesso(msg);
 
-            if (numEvent == 2) // há espaço na memória
+            if (memoria_ret == MEMORY_FULL)
             {
-				genDadosProcesso(msg);
-				memoria_ret = listaCircular.guardarDadoProcesso(msg);
-				cc_printf(CCBLUE, "Dado de processo gerado - %d\n", memoria_ret);
+                cc_printf(CCRED, "Lista circular cheia\n");
 
-				dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-				numEvent = dwRet - WAIT_OBJECT_0;
+                do {
+					dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+					numEvent = dwRet - WAIT_OBJECT_0;
+
+					if (numEvent == 1) break;
+					else if (numEvent == 0) // evento de bloqueio
+					{
+						ResetEvent(hBlockLeituraEvent);
+
+						cc_printf(CCBLUE, "Tarefa de leitura de dados bloqueada\n");
+						dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+						numEvent = dwRet - WAIT_OBJECT_0;
+						if (numEvent == 0)
+						{
+							ResetEvent(hBlockLeituraEvent);
+							cc_printf(CCBLUE, "Tarefa de leitura de dados desbloqueada\n");
+						}
+					}
+                    else if (numEvent == 2) // vaga livre
+                    {
+						memoria_ret = listaCircular.guardarDadoProcesso(msg);
+                    }
+                } while (memoria_ret == MEMORY_FULL);
+
+                if (numEvent == 1) break;
             }
+			cc_printf(CCBLUE, "Dado de processo armazenado - %d\n", memoria_ret);
 
-            if (numEvent == 2) // há espaço na memória
+            // Mensagem de Dados de Otimização ------------------------------------------
+		    genDadosOtimizacao(msg);
+			memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
+
+            if (memoria_ret == MEMORY_FULL)
             {
-				genDadosOtimizacao(msg);
-				memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
-				cc_printf(CCBLUE, "Dado de otimizacao gerado - %d\n", memoria_ret);
+                cc_printf(CCRED, "Lista circular cheia\n");
+
+                do {
+					dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+					numEvent = dwRet - WAIT_OBJECT_0;
+
+					if (numEvent == 1) break;
+					else if (numEvent == 0) // evento de bloqueio
+					{
+						ResetEvent(hBlockLeituraEvent);
+
+						cc_printf(CCBLUE, "Tarefa de leitura de dados bloqueada\n");
+						dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+						numEvent = dwRet - WAIT_OBJECT_0;
+						if (numEvent == 0)
+						{
+							ResetEvent(hBlockLeituraEvent);
+							cc_printf(CCBLUE, "Tarefa de leitura de dados desbloqueada\n");
+						}
+					}
+                    else if (numEvent == 2) // vaga livre
+                    {
+						memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
+                    }
+                } while (memoria_ret == MEMORY_FULL);
+
+                if (numEvent == 1) break;
             }
+			cc_printf(CCBLUE, "Dado de otimizacao armazenado - %d\n", memoria_ret);
 
             //genAlarme(msg);
         }
