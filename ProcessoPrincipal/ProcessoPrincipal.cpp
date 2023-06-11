@@ -75,6 +75,7 @@ CRITICAL_SECTION csListaCircularIO;
 HANDLE hSemMemoriaLeitura;
 HANDLE hNovosDadosProcessoEvent;
 HANDLE hNovosDadosOtimizacaoEvent;
+HANDLE hMemoryFullEvent;
 
 // Globais
 ListaCircular listaCircular;
@@ -112,6 +113,8 @@ int main()
 
     hSemMemoriaLeitura = CreateSemaphore(NULL, 0, 1, "MemoriaLeitura");
     CheckForError(hSemMemoriaLeitura);
+    hMemoryFullEvent = CreateEvent(NULL, TRUE, FALSE, "MemoryFullEvent");
+    CheckForError(hMemoryFullEvent);
     hNovosDadosProcessoEvent = CreateEvent(NULL, TRUE, FALSE, "NovosDadosProcessoEvent");
     CheckForError(hNovosDadosProcessoEvent);
     hNovosDadosOtimizacaoEvent = CreateEvent(NULL, TRUE, FALSE, "NovosDadosOtimizacaoEvent");
@@ -317,56 +320,89 @@ const int msPeriodProcesso      = 1000;
 const int msPeriodOtimizacao    = 1000;
 const int msPeriodAlarme        = 1000;
 
-void InitializeTimers()
+// Impede que Timer sejam apagados novamente ou criados novamente
+BOOL ProcessoRodando    = false;
+BOOL OtimizacaoRodando  = false;
+BOOL AlarmeRodando      = false;
+
+void InitializeTimers(BOOL apenasDados = false)
 {
 	BOOL status;
+	printf("iap:%d\n", apenasDados);
 
-	status = CreateTimerQueueTimer(&hTimerProcesso, hTimerQueue, (WAITORTIMERCALLBACK) LerProcesso,
-								   NULL, msPeriodProcesso, msPeriodProcesso, WT_EXECUTEDEFAULT);
-	if (!status){
-        cc_printf(CCRED, "[Leitura] Erro em TimerProcesso! Codigo = %d)\n", GetLastError());
-        exit(EXIT_FAILURE);
+    if (!ProcessoRodando) 
+    {
+        printf("i1\n");
+        ProcessoRodando = true;
+		status = CreateTimerQueueTimer(&hTimerProcesso, hTimerQueue, (WAITORTIMERCALLBACK) LerProcesso,
+									   NULL, msPeriodProcesso, msPeriodProcesso, WT_EXECUTEDEFAULT);
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro em TimerProcesso! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
     }
 
-	status = CreateTimerQueueTimer(&hTimerOtimizacao, hTimerQueue, (WAITORTIMERCALLBACK) LerOtimizacao,
-								   NULL, msPeriodOtimizacao, msPeriodOtimizacao, WT_EXECUTEDEFAULT);
-	if (!status){
-        cc_printf(CCRED, "[Leitura] Erro em TimerOtimizacao! Codigo = %d)\n", GetLastError());
-        exit(EXIT_FAILURE);
+    if (!OtimizacaoRodando)
+    {
+        printf("i2\n");
+        OtimizacaoRodando = true;
+		status = CreateTimerQueueTimer(&hTimerOtimizacao, hTimerQueue, (WAITORTIMERCALLBACK) LerOtimizacao,
+									   NULL, msPeriodOtimizacao, msPeriodOtimizacao, WT_EXECUTEDEFAULT);
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro em TimerOtimizacao! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
     }
 
-	status = CreateTimerQueueTimer(&hTimerAlarme, hTimerQueue, (WAITORTIMERCALLBACK) LerAlarme,
-								   NULL, msPeriodAlarme, msPeriodAlarme, WT_EXECUTEDEFAULT);
-	if (!status){
-        cc_printf(CCRED, "[Leitura] Erro em TimerAlarme! Codigo = %d)\n", GetLastError());
-        exit(EXIT_FAILURE);
+    if (!AlarmeRodando && !apenasDados)
+    {
+        printf("i3\n");
+        AlarmeRodando = true;
+		status = CreateTimerQueueTimer(&hTimerAlarme, hTimerQueue, (WAITORTIMERCALLBACK) LerAlarme,
+									   NULL, msPeriodAlarme, msPeriodAlarme, WT_EXECUTEDEFAULT);
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro em TimerAlarme! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
     }
 }
 void StopTimers(BOOL apenasDados = false)
 {
 	BOOL status;
+	printf("sap:%d\n", apenasDados);
 
-    if (!apenasDados)
+    if (ProcessoRodando)
     {
-		status = DeleteTimerQueueTimer(hTimerQueue, hTimerAlarme, NULL); 
-		//if (!status){
-		//	cc_printf(CCRED, "[Leitura] Erro ao deletar TimerAlarme! Codigo = %d)\n", GetLastError());
-		//	exit(EXIT_FAILURE);
-		//}
+        printf("s1\n");
+        ProcessoRodando = false;
+		status = DeleteTimerQueueTimer(hTimerQueue, hTimerProcesso, NULL); 
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerProcesso! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
     }
 
-	status = DeleteTimerQueueTimer(hTimerQueue, hTimerProcesso, NULL); 
-	//if (!status){
-	//	cc_printf(CCRED, "[Leitura] Erro ao deletar TimerProcesso! Codigo = %d)\n", GetLastError());
-	//	exit(EXIT_FAILURE);
-	//}
+    if (OtimizacaoRodando)
+    {
+        printf("s2\n");
+        OtimizacaoRodando = false;
+		status = DeleteTimerQueueTimer(hTimerQueue, hTimerOtimizacao, NULL); 
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerOtimizacao! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+    }
 
-	status = DeleteTimerQueueTimer(hTimerQueue, hTimerOtimizacao, NULL); 
- //   if (!status){
-	//	cc_printf(CCRED, "[Leitura] Erro ao deletar TimerOtimizacao! Codigo = %d)\n", GetLastError());
-	//	exit(EXIT_FAILURE);
-	//}
-
+    if (AlarmeRodando && !apenasDados)
+    {
+        printf("s3\n");
+        AlarmeRodando = false;
+		status = DeleteTimerQueueTimer(hTimerQueue, hTimerAlarme, NULL); 
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerAlarme! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+    }
 }
 
 void WINAPI ThreadLeituraDados(LPVOID tArgs)
@@ -374,6 +410,8 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 	cc_printf(CCWHITE, "[I] Thread Leitura de Dados inicializada\n");
 
 	BOOL status;
+    BOOL blockAll = false;
+    BOOL blockDados = false;
 
 	hTimerQueue = CreateTimerQueue();
 	if (hTimerQueue == NULL){
@@ -382,31 +420,56 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
     }
     InitializeTimers();
     
-    HANDLE hEvents[2] = { hBlockLeituraEvent, hTerminateEvent };
+    HANDLE hEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hMemoryFullEvent };
+	HANDLE hMemoriaEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hSemMemoriaLeitura };
     DWORD dwRet;
     DWORD numEvent;
     do {
-		dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+		dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
 		numEvent = dwRet - WAIT_OBJECT_0;
 
-        if (numEvent == 0) // bloqueio da thread
+        if (numEvent == 2) // hMemoryFullEvent - bloqueio por memória cheia
+        {
+
+            if (blockDados == false)
+            {
+                blockDados = true;
+                StopTimers(true);
+				cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
+            }
+            if (blockDados == true)
+            {
+                dwRet = WaitForMultipleObjects(3, hMemoriaEvents, FALSE, INFINITE);
+                numEvent = dwRet - WAIT_OBJECT_0;
+
+                if (numEvent == 2)
+                {
+					ResetEvent(hMemoryFullEvent);
+					blockDados = false;
+					if (blockAll != true) InitializeTimers();
+                }
+            }
+        }
+
+        if (numEvent == 0) // hBlockLeituraEvent - bloqueio da thread pelo usuário
         {
 			ResetEvent(hBlockLeituraEvent);
-            StopTimers();
 
-			cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
-			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-			numEvent = dwRet - WAIT_OBJECT_0;
-			if (numEvent == 0)
-			{
-				ResetEvent(hBlockLeituraEvent);
-				cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
-
+            if (blockAll == false)
+            {
+                blockAll = true;
+				StopTimers();
+				cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
+            }
+            else
+            {
+                blockAll = false;
                 InitializeTimers();
-			}
+				cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
+            }
         }
-    } while (numEvent != 1); // ESC pressionado
-
+    } while (numEvent != 1); // hTerminateEvent - ESC pressionado
+ 
 	if (!DeleteTimerQueueEx(hTimerQueue, NULL))
         cc_printf(CCRED, "[Leitura] Falha em DeleteTimerQueue! Codigo = %d\n", GetLastError());
 
@@ -430,30 +493,17 @@ void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 	memoria_ret = listaCircular.guardarDadoProcesso(msg);
 	LeaveCriticalSection(&csListaCircularIO);
 
+    if (memoria_ret == MEMORY_FULL)
+    {
+        printf("lp\n");
+        SetEvent(hMemoryFullEvent);
+    }
+
     if (memoria_ret != MEMORY_FULL) 
     {
         NSEQ_Processo = 1 + (NSEQ_Processo % 9999);
 		cc_printf(CCGREEN, "[Leitura] Dado de processo armazenado\n");
 		SetEvent(hNovosDadosProcessoEvent);
-    }
-    else
-    {
-        StopTimers(true);
-		cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
-
-        // esvazia semáforo
-		dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-		numEvent = dwRet - WAIT_OBJECT_0;
-
-		if (numEvent == 1) {
-            // aguarda thread de captura liberar uma vaga
-			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-			numEvent = dwRet - WAIT_OBJECT_0;
-
-			if (numEvent == 1) {
-				cc_printf(CCGREEN, "Teste\n");
-			}
-		}
     }
 }
 void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
