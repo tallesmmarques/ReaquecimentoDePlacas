@@ -376,10 +376,11 @@ void StopTimers(BOOL apenasDados = FALSE)
 
     if (ProcessoRodando)
     {
-        printf("s1\n");
+        printf("s1 - %d\n", ProcessoRodando);
         ProcessoRodando = FALSE;
 		status = DeleteTimerQueueTimer(hTimerQueue, hTimerProcesso, NULL); 
-		if (!status){
+		if (!status && GetLastError() != ERROR_IO_PENDING)
+        {
 			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerProcesso! Codigo = %d)\n", GetLastError());
 			exit(EXIT_FAILURE);
 		}
@@ -387,10 +388,11 @@ void StopTimers(BOOL apenasDados = FALSE)
 
     if (OtimizacaoRodando)
     {
-        printf("s2\n");
+        printf("s2 - %d\n", OtimizacaoRodando);
         OtimizacaoRodando = FALSE;
 		status = DeleteTimerQueueTimer(hTimerQueue, hTimerOtimizacao, NULL); 
-		if (!status){
+		if (!status && GetLastError() != ERROR_IO_PENDING)
+        {
 			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerOtimizacao! Codigo = %d)\n", GetLastError());
 			exit(EXIT_FAILURE);
 		}
@@ -398,10 +400,11 @@ void StopTimers(BOOL apenasDados = FALSE)
 
     if (AlarmeRodando && !apenasDados)
     {
-        printf("s3\n");
+        printf("s3 - %d\n", AlarmeRodando);
         AlarmeRodando = FALSE;
 		status = DeleteTimerQueueTimer(hTimerQueue, hTimerAlarme, NULL); 
-		if (!status){
+		if (!status && GetLastError() != ERROR_IO_PENDING)
+        {
 			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerAlarme! Codigo = %d)\n", GetLastError());
 			exit(EXIT_FAILURE);
 		}
@@ -433,15 +436,16 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
         if (numEvent == 2) // hMemoryFullEvent - bloqueio por memória cheia
         {
-
             if (blockDados == FALSE)
             {
+				printf("false MemoryFull\n");
                 blockDados = TRUE;
                 StopTimers(TRUE);
 				cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
             }
             if (blockDados == TRUE)
             {
+				printf("true MemoryFull\n");
                 dwRet = WaitForMultipleObjects(3, hMemoriaEvents, FALSE, INFINITE);
                 numEvent = dwRet - WAIT_OBJECT_0;
 
@@ -483,12 +487,7 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
 void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
-    HANDLE hEvents[2] = { hTerminateEvent, hSemMemoriaLeitura };
-    DWORD dwRet;
-    DWORD numEvent;
     int memoria_ret;
-	BOOL status;
-
     char msg[MAX_MSG];
 
 	genDadosProcesso(msg);
@@ -500,6 +499,11 @@ void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
     if (memoria_ret == MEMORY_FULL)
     {
         printf("lp\n");
+        if (ProcessoRodando == FALSE)
+        {
+            printf("saida brusca processo");
+            return;
+        }
         SetEvent(hMemoryFullEvent);
     }
 
@@ -512,8 +516,32 @@ void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 }
 void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
-    //cc_printf(CCGREEN, "[Leitura] Ler Otimizacao Teste\n");
-    return;
+    int memoria_ret;
+    char msg[MAX_MSG];
+
+	genDadosOtimizacao(msg);
+
+	EnterCriticalSection(&csListaCircularIO);
+	memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
+	LeaveCriticalSection(&csListaCircularIO);
+
+    if (memoria_ret == MEMORY_FULL)
+    {
+        printf("lo\n");
+        if (OtimizacaoRodando == FALSE)
+        {
+            printf("saida brusca otimizacao");
+            return;
+        }
+        SetEvent(hMemoryFullEvent);
+    }
+
+    if (memoria_ret != MEMORY_FULL) 
+    {
+        NSEQ_Otimizacao = 1 + (NSEQ_Otimizacao % 9999);
+		cc_printf(CCBLUE, "[Leitura] Dado de otimizacao armazenado\n");
+		SetEvent(hNovosDadosOtimizacaoEvent);
+    }
 }
 void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
@@ -554,8 +582,6 @@ void genDadosProcesso(char* msg)
 }
 void genDadosOtimizacao(char* msg) 
 {
-	static int NSEQ = 1;
-
     int TIPO = 01;
     double T_ZONA_P, T_ZONA_A, T_ZONA_E;
     SYSTEMTIME TIMESTAMP;
@@ -568,17 +594,15 @@ void genDadosOtimizacao(char* msg)
     if (T_ZONA_A < 1000) // mantém a mensagem fixa em 42 caracteres
     {
 		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$0%04.1f$%04.1f$%02d:%02d:%02d", 
-			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
+			NSEQ_Otimizacao, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
     else
     {
 		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02d:%02d:%02d", 
-			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
+			NSEQ_Otimizacao, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
-
-	NSEQ = 1 + (NSEQ % 9999);
 }
 void genAlarme(char* msg)
 {
@@ -812,6 +836,7 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 
 				cc_printf(CCBLUE, "[Otimizacao] %s\n", msg);
 				ReleaseSemaphore(hSemMemoriaLeitura, 1, NULL);
+                PulseEvent(hMemorySpaceEvent);
             } while (ret != MEMORY_EMPTY);
         }
         else if (numEvent == 0)
