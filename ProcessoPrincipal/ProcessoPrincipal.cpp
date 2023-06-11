@@ -72,7 +72,6 @@ HANDLE hBlockExOtimizacaoEvent;
 HANDLE hClearConsoleEvent;
 
 CRITICAL_SECTION csListaCircularIO;
-HANDLE hSemMemoriaLeitura;
 HANDLE hNovosDadosProcessoEvent;
 HANDLE hNovosDadosOtimizacaoEvent;
 HANDLE hMemoryFullEvent;
@@ -112,8 +111,6 @@ int main()
     hBlockExOtimizacaoEvent = CreateEvent(NULL, TRUE, FALSE, "BlockExOtimizacaoEvent");
     CheckForError(hBlockExOtimizacaoEvent);
 
-    hSemMemoriaLeitura = CreateSemaphore(NULL, 0, 1, "MemoriaLeitura");
-    CheckForError(hSemMemoriaLeitura);
     hMemoryFullEvent = CreateEvent(NULL, TRUE, FALSE, "MemoryFullEvent");
     CheckForError(hMemoryFullEvent);
     hMemorySpaceEvent = CreateEvent(NULL, FALSE, FALSE, "MemorySpaceEvent");
@@ -602,145 +599,6 @@ void genAlarme(char* msg)
 	NSEQ = 1 + (NSEQ % 9999);
 }
 
-void WINAPI TmpThreadLeituraDados(LPVOID tArgs)
-{
-	cc_printf(CCWHITE, "[I] Thread Leitura de Dados inicializada\n");
-
-  //  HANDLE hThreadLeituraDadosAlarme = (HANDLE)_beginthreadex(
-  //      NULL,
-  //      0,
-  //      (CAST_FUNCTION) ThreadLeituraDadosAlarmes,
-  //      (LPVOID) NULL,
-  //      0,
-  //      (CAST_LPDWORD) NULL
-  //  );
-  //  if (hThreadLeituraDadosAlarme) {
-		//cc_printf(CCWHITE, "[C] Thread Leitura de Dados para Alarmes criada\n");
-  //  } else {
-		//cc_printf(CCRED, "Erro na criação da thread Leitura de Dados para Alarmes!\n");
-  //      exit(0);
-  //  }
-
-    char msg[MAX_MSG];
-    int timePeriod = 1; // período de 1 segundo
-
-    HANDLE hEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hSemMemoriaLeitura };
-    DWORD dwRet;
-    DWORD numEvent;
-    int memoria_ret;
-
-	do {
-        dwRet = WaitForMultipleObjects(2, hEvents, FALSE, 1000*timePeriod);
-		numEvent = dwRet - WAIT_OBJECT_0;
-
-        if (dwRet == WAIT_TIMEOUT) 
-        {
-            // Mensagem de Dados de Processos -------------------------------------------
-		    genDadosProcesso(msg);
-            EnterCriticalSection(&csListaCircularIO);
-			memoria_ret = listaCircular.guardarDadoProcesso(msg);
-            LeaveCriticalSection(&csListaCircularIO);
-
-            if (memoria_ret == MEMORY_FULL)
-            {
-                cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
-
-                do {
-					dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-					numEvent = dwRet - WAIT_OBJECT_0;
-
-					if (numEvent == 1) break;
-					else if (numEvent == 0) // evento de bloqueio
-					{
-						ResetEvent(hBlockLeituraEvent);
-
-						cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
-						dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-						numEvent = dwRet - WAIT_OBJECT_0;
-						if (numEvent == 0)
-						{
-							ResetEvent(hBlockLeituraEvent);
-							cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
-						}
-					}
-                    else if (numEvent == 2) // vaga livre
-                    {
-						EnterCriticalSection(&csListaCircularIO);
-						memoria_ret = listaCircular.guardarDadoProcesso(msg);
-						LeaveCriticalSection(&csListaCircularIO);
-                    }
-                } while (memoria_ret == MEMORY_FULL);
-
-                if (numEvent == 1) break;
-            }
-			//cc_printf(CCBLUE, "[Leitura] Dado de processo armazenado\n");
-            SetEvent(hNovosDadosProcessoEvent);
-
-            // Mensagem de Dados de Otimização ------------------------------------------
-		    genDadosOtimizacao(msg);
-			EnterCriticalSection(&csListaCircularIO);
-			memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
-			LeaveCriticalSection(&csListaCircularIO);
-
-            if (memoria_ret == MEMORY_FULL)
-            {
-                cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
-
-                do {
-					dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-					numEvent = dwRet - WAIT_OBJECT_0;
-
-					if (numEvent == 1) break;
-					else if (numEvent == 0) // evento de bloqueio
-					{
-						ResetEvent(hBlockLeituraEvent);
-
-						cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
-						dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-						numEvent = dwRet - WAIT_OBJECT_0;
-						if (numEvent == 0)
-						{
-							ResetEvent(hBlockLeituraEvent);
-							cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
-						}
-					}
-                    else if (numEvent == 2) // vaga livre
-                    {
-						EnterCriticalSection(&csListaCircularIO);
-						memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
-						LeaveCriticalSection(&csListaCircularIO);
-                    }
-                } while (memoria_ret == MEMORY_FULL);
-
-                if (numEvent == 1) break;
-            }
-			//cc_printf(CCBLUE, "[Leitura] Dado de otimizacao armazenado\n");
-            SetEvent(hNovosDadosOtimizacaoEvent);
-        }
-
-        if (numEvent == 0) // evento de bloqueio
-        {
-			ResetEvent(hBlockLeituraEvent);
-
-			cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
-			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-			numEvent = dwRet - WAIT_OBJECT_0;
-			if (numEvent == 0)
-			{
-				ResetEvent(hBlockLeituraEvent);
-				cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
-			}
-        }
-    } while (numEvent != 1); // loop até evento TermLeitura 
-
-    //WaitForSingleObject(hThreadLeituraDadosAlarme, INFINITE);
-    //CloseHandle(hThreadLeituraDadosAlarme);
-
-    cc_printf(CCRED, "[S] Saindo da thread Leitura de Dados\n");
-
-    _endthreadex(0);
-}
-
 void WINAPI ThreadCapturaProcesso(LPVOID)
 {
 	cc_printf(CCWHITE, "[I] Thread Captura de Dados de Processo inicializada\n");
@@ -766,7 +624,6 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
                 if (ret == MEMORY_EMPTY) break;
 
 				cc_printf(CCGREEN, "[Processo] %s\n", msg);
-				ReleaseSemaphore(hSemMemoriaLeitura, 1, NULL);
                 PulseEvent(hMemorySpaceEvent);
             } while (ret != MEMORY_EMPTY);
         }
@@ -815,7 +672,6 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
                 if (ret == MEMORY_EMPTY) break;
 
 				cc_printf(CCBLUE, "[Otimizacao] %s\n", msg);
-				ReleaseSemaphore(hSemMemoriaLeitura, 1, NULL);
                 PulseEvent(hMemorySpaceEvent);
             } while (ret != MEMORY_EMPTY);
         }
