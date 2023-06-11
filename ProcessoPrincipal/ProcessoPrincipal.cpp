@@ -70,6 +70,7 @@ HANDLE hBlockExOtimizacaoEvent;
 
 HANDLE hClearConsoleEvent;
 
+CRITICAL_SECTION csListaCircularIO;
 HANDLE hSemMemoriaLeitura;
 HANDLE hNovosDadosProcessoEvent;
 HANDLE hNovosDadosOtimizacaoEvent;
@@ -93,6 +94,7 @@ int main()
     }
 
     InitializeCriticalSection(&csConsole);
+    InitializeCriticalSection(&csListaCircularIO);
 
     hTerminateEvent = CreateEvent(NULL, TRUE, FALSE, "TerminateEvent");
     CheckForError(hTerminateEvent);
@@ -405,7 +407,9 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
         {
             // Mensagem de Dados de Processos -------------------------------------------
 		    genDadosProcesso(msg);
+            EnterCriticalSection(&csListaCircularIO);
 			memoria_ret = listaCircular.guardarDadoProcesso(msg);
+            LeaveCriticalSection(&csListaCircularIO);
 
             if (memoria_ret == MEMORY_FULL)
             {
@@ -431,7 +435,9 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 					}
                     else if (numEvent == 2) // vaga livre
                     {
+						EnterCriticalSection(&csListaCircularIO);
 						memoria_ret = listaCircular.guardarDadoProcesso(msg);
+						LeaveCriticalSection(&csListaCircularIO);
                     }
                 } while (memoria_ret == MEMORY_FULL);
 
@@ -442,7 +448,9 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
             // Mensagem de Dados de Otimização ------------------------------------------
 		    genDadosOtimizacao(msg);
+			EnterCriticalSection(&csListaCircularIO);
 			memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
+			LeaveCriticalSection(&csListaCircularIO);
 
             if (memoria_ret == MEMORY_FULL)
             {
@@ -468,7 +476,9 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 					}
                     else if (numEvent == 2) // vaga livre
                     {
+						EnterCriticalSection(&csListaCircularIO);
 						memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
+						LeaveCriticalSection(&csListaCircularIO);
                     }
                 } while (memoria_ret == MEMORY_FULL);
 
@@ -559,7 +569,9 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
         {
             ResetEvent(hNovosDadosProcessoEvent);
             do {
+				EnterCriticalSection(&csListaCircularIO);
 			    ret = listaCircular.lerDadoProcesso(msg);
+				LeaveCriticalSection(&csListaCircularIO);
                 if (ret == MEMORY_EMPTY) break;
 
 				cc_printf(CCGREEN, "[Processo] %s\n", msg);
@@ -605,7 +617,9 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
         {
             ResetEvent(hNovosDadosOtimizacaoEvent);
             do {
+				EnterCriticalSection(&csListaCircularIO);
 			    ret = listaCircular.lerDadoOtimizacao(msg);
+				LeaveCriticalSection(&csListaCircularIO);
                 if (ret == MEMORY_EMPTY) break;
 
 				cc_printf(CCBLUE, "[Otimizacao] %s\n", msg);
