@@ -1,4 +1,6 @@
 #define WIN32_LEAN_AND_MEAN 
+#define _CRT_SECURE_CPP_OVERLOAD_STANDARD_NAMES 1
+#define __WIN32_WINNT 0x0500
 
 #include <windows.h>
 #include <stdio.h>
@@ -372,7 +374,72 @@ void genDadosOtimizacao(char* msg) {
 	NSEQ = 1 + (NSEQ % 9999);
 }
 
+void CALLBACK LerProcesso(PVOID, BOOLEAN);
+void CALLBACK LerOtimizacao(PVOID, BOOLEAN);
+void CALLBACK LerAlarme(PVOID, BOOLEAN);
+
 void WINAPI ThreadLeituraDados(LPVOID tArgs)
+{
+	cc_printf(CCWHITE, "[I] Thread Leitura de Dados inicializada\n");
+
+	HANDLE hTimerQueue;
+    HANDLE hTimerProcesso, hTimerOtimizacao, hTimerAlarme;
+	BOOL status;
+
+    const int msPeriodProcesso      = 1000;
+    const int msPeriodOtimizacao    = 1000;
+    const int msPeriodAlarme        = 1000;
+
+	hTimerQueue = CreateTimerQueue();
+	if (hTimerQueue == NULL){
+        cc_printf(CCRED, "[Leitura] Falha em CreateTimerQueue! Codigo =%d)\n", GetLastError());
+        exit(EXIT_FAILURE);
+    }
+	status = CreateTimerQueueTimer(&hTimerProcesso, hTimerQueue, (WAITORTIMERCALLBACK) LerProcesso,
+								   NULL, 1000, msPeriodProcesso, WT_EXECUTEDEFAULT);
+	if (!status){
+        cc_printf(CCRED, "[Leitura] Erro em TimerProcesso! Codigo = %d)\n", GetLastError());
+        exit(EXIT_FAILURE);
+    }
+	status = CreateTimerQueueTimer(&hTimerProcesso, hTimerQueue, (WAITORTIMERCALLBACK) LerOtimizacao,
+								   NULL, 1000, msPeriodOtimizacao, WT_EXECUTEDEFAULT);
+	if (!status){
+        cc_printf(CCRED, "[Leitura] Erro em TimerOtimizacao! Codigo = %d)\n", GetLastError());
+        exit(EXIT_FAILURE);
+    }
+	status = CreateTimerQueueTimer(&hTimerProcesso, hTimerQueue, (WAITORTIMERCALLBACK) LerAlarme,
+								   NULL, 1000, msPeriodAlarme, WT_EXECUTEDEFAULT);
+	if (!status){
+        cc_printf(CCRED, "[Leitura] Erro em TimerAlarme! Codigo = %d)\n", GetLastError());
+        exit(EXIT_FAILURE);
+    }
+
+    DWORD dwRet;
+    DWORD numEvent;
+
+	dwRet = WaitForSingleObject(hTerminateEvent, INFINITE);
+
+	if (!DeleteTimerQueueEx(hTimerQueue, NULL))
+        cc_printf(CCRED, "[Leitura] Falha em DeleteTimerQueue! Codigo = %d\n", GetLastError());
+
+    cc_printf(CCRED, "[S] Saindo da thread Leitura de Dados\n");
+    _endthreadex(0);
+}
+
+void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
+{
+    cc_printf(CCBLUE, "[Leitura] Ler Processo Teste\n");
+}
+void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
+{
+    cc_printf(CCBLUE, "[Leitura] Ler Otimizacao Teste\n");
+}
+void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
+{
+    cc_printf(CCBLUE, "[Leitura] Ler Alarme Teste\n");
+}
+
+void WINAPI TmpThreadLeituraDados(LPVOID tArgs)
 {
 	cc_printf(CCWHITE, "[I] Thread Leitura de Dados inicializada\n");
 
