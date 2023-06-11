@@ -331,11 +331,9 @@ BOOL AlarmeRodando      = FALSE;
 void InitializeTimers(BOOL apenasAlarme = FALSE)
 {
 	BOOL status;
-	printf("iaa:%d\n", apenasAlarme);
 
     if (!ProcessoRodando && !apenasAlarme) 
     {
-        printf("i1\n");
         ProcessoRodando = TRUE;
 		status = CreateTimerQueueTimer(&hTimerProcesso, hTimerQueue, (WAITORTIMERCALLBACK) LerProcesso,
 									   NULL, msPeriodProcesso, msPeriodProcesso, WT_EXECUTEDEFAULT);
@@ -347,7 +345,6 @@ void InitializeTimers(BOOL apenasAlarme = FALSE)
 
     if (!OtimizacaoRodando && !apenasAlarme)
     {
-        printf("i2\n");
         OtimizacaoRodando = TRUE;
 		status = CreateTimerQueueTimer(&hTimerOtimizacao, hTimerQueue, (WAITORTIMERCALLBACK) LerOtimizacao,
 									   NULL, msPeriodOtimizacao, msPeriodOtimizacao, WT_EXECUTEDEFAULT);
@@ -359,7 +356,6 @@ void InitializeTimers(BOOL apenasAlarme = FALSE)
 
     if (!AlarmeRodando)
     {
-        printf("i3\n");
         AlarmeRodando = TRUE;
 		status = CreateTimerQueueTimer(&hTimerAlarme, hTimerQueue, (WAITORTIMERCALLBACK) LerAlarme,
 									   NULL, msPeriodAlarme, msPeriodAlarme, WT_EXECUTEDEFAULT);
@@ -372,11 +368,9 @@ void InitializeTimers(BOOL apenasAlarme = FALSE)
 void StopTimers(BOOL apenasDados = FALSE)
 {
 	BOOL status;
-	printf("sad:%d\n", apenasDados);
 
     if (ProcessoRodando)
     {
-        printf("s1 - %d\n", ProcessoRodando);
         ProcessoRodando = FALSE;
 		status = DeleteTimerQueueTimer(hTimerQueue, hTimerProcesso, NULL); 
 		if (!status && GetLastError() != ERROR_IO_PENDING)
@@ -388,7 +382,6 @@ void StopTimers(BOOL apenasDados = FALSE)
 
     if (OtimizacaoRodando)
     {
-        printf("s2 - %d\n", OtimizacaoRodando);
         OtimizacaoRodando = FALSE;
 		status = DeleteTimerQueueTimer(hTimerQueue, hTimerOtimizacao, NULL); 
 		if (!status && GetLastError() != ERROR_IO_PENDING)
@@ -400,7 +393,6 @@ void StopTimers(BOOL apenasDados = FALSE)
 
     if (AlarmeRodando && !apenasDados)
     {
-        printf("s3 - %d\n", AlarmeRodando);
         AlarmeRodando = FALSE;
 		status = DeleteTimerQueueTimer(hTimerQueue, hTimerAlarme, NULL); 
 		if (!status && GetLastError() != ERROR_IO_PENDING)
@@ -438,14 +430,12 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
         {
             if (blockDados == FALSE)
             {
-				printf("false MemoryFull\n");
                 blockDados = TRUE;
                 StopTimers(TRUE);
 				cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
             }
             if (blockDados == TRUE)
             {
-				printf("true MemoryFull\n");
                 dwRet = WaitForMultipleObjects(3, hMemoriaEvents, FALSE, INFINITE);
                 numEvent = dwRet - WAIT_OBJECT_0;
 
@@ -498,20 +488,15 @@ void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 
     if (memoria_ret == MEMORY_FULL)
     {
-        printf("lp\n");
-        if (ProcessoRodando == FALSE)
-        {
-            printf("saida brusca processo");
-            return;
-        }
+        if (ProcessoRodando == FALSE) return; // já foi avisado que a memória está cheia
         SetEvent(hMemoryFullEvent);
     }
 
     if (memoria_ret != MEMORY_FULL) 
     {
         NSEQ_Processo = 1 + (NSEQ_Processo % 9999);
-		cc_printf(CCGREEN, "[Leitura] Dado de processo armazenado\n");
 		SetEvent(hNovosDadosProcessoEvent);
+		//cc_printf(CCGREEN, "[Leitura] Dado de processo armazenado\n");
     }
 }
 void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
@@ -527,20 +512,15 @@ void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 
     if (memoria_ret == MEMORY_FULL)
     {
-        printf("lo\n");
-        if (OtimizacaoRodando == FALSE)
-        {
-            printf("saida brusca otimizacao");
-            return;
-        }
+        if (OtimizacaoRodando == FALSE) return; // já foi avisado que a memória está cheia
         SetEvent(hMemoryFullEvent);
     }
 
     if (memoria_ret != MEMORY_FULL) 
     {
         NSEQ_Otimizacao = 1 + (NSEQ_Otimizacao % 9999);
-		cc_printf(CCBLUE, "[Leitura] Dado de otimizacao armazenado\n");
 		SetEvent(hNovosDadosOtimizacaoEvent);
+		//cc_printf(CCBLUE, "[Leitura] Dado de otimizacao armazenado\n");
     }
 }
 void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
