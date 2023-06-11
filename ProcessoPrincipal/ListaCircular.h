@@ -3,7 +3,7 @@
 #include <string>
 #include <Windows.h>
 
-#define MAX_DADOS 200
+#define MAX_DADOS 5
 #define MEMORY_FULL 1
 #define MEMORY_EMPTY 2
 

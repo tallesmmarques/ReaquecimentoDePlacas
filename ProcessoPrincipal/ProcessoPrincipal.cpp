@@ -128,18 +128,18 @@ int main()
     ZeroMemory(&siExP, sizeof(siExP));
     siExP.cb = sizeof(siExP);
     ZeroMemory(&piExP, sizeof(piExP));
-    status = CreateProcess(
-        NULL,
-        "ProcessoExProcesso.exe",
-        NULL,
-        NULL,
-        TRUE,
-        CREATE_NEW_CONSOLE,
-        NULL,
-        NULL,
-        &siExP,
-        &piExP
-    );
+    //status = CreateProcess(
+    //    NULL,
+    //    "ProcessoExProcesso.exe",
+    //    NULL,
+    //    NULL,
+    //    TRUE,
+    //    CREATE_NEW_CONSOLE,
+    //    NULL,
+    //    NULL,
+    //    &siExP,
+    //    &piExP
+    //);
 
 	STARTUPINFO siExO;
     PROCESS_INFORMATION piExO;
@@ -147,18 +147,18 @@ int main()
     ZeroMemory(&siExO, sizeof(siExO));
     siExO.cb = sizeof(siExO);
     ZeroMemory(&piExO, sizeof(piExO));
-    status = CreateProcess(
-        NULL,
-        "ProcessoExOtimizacao.exe",
-        NULL,
-        NULL,
-        TRUE,
-        CREATE_NEW_CONSOLE,
-        NULL,
-        NULL,
-        &siExO,
-        &piExO
-    );
+    //status = CreateProcess(
+    //    NULL,
+    //    "ProcessoExOtimizacao.exe",
+    //    NULL,
+    //    NULL,
+    //    TRUE,
+    //    CREATE_NEW_CONSOLE,
+    //    NULL,
+    //    NULL,
+    //    &siExO,
+    //    &piExO
+    //);
 
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
@@ -222,20 +222,20 @@ int main()
 
     DWORD dwRet;
 
-    const DWORD numProcess = 2;
-    HANDLE hProcess[numProcess];
-    hProcess[0] = piExP.hProcess;
-    hProcess[1] = piExO.hProcess;
+    //const DWORD numProcess = 2;
+    //HANDLE hProcess[numProcess];
+    //hProcess[0] = piExP.hProcess;
+    //hProcess[1] = piExO.hProcess;
 
-    dwRet = WaitForMultipleObjects(numProcess, hProcess, TRUE, INFINITE);
-    CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numProcess));
-    cc_printf(CCRED, "[S] Processo Exibicao de Dados de Processo encerrado \n");
-    cc_printf(CCRED, "[S] Processo Exibicao de Dados de Otimizacao encerrado \n");
+    //dwRet = WaitForMultipleObjects(numProcess, hProcess, TRUE, INFINITE);
+    //CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numProcess));
+    //cc_printf(CCRED, "[S] Processo Exibicao de Dados de Processo encerrado \n");
+    //cc_printf(CCRED, "[S] Processo Exibicao de Dados de Otimizacao encerrado \n");
 
-    CloseHandle(piExP.hProcess);
-    CloseHandle(piExP.hThread);
-    CloseHandle(piExO.hProcess);
-    CloseHandle(piExO.hThread);
+    //CloseHandle(piExP.hProcess);
+    //CloseHandle(piExP.hThread);
+    //CloseHandle(piExO.hProcess);
+    //CloseHandle(piExO.hThread);
 
     const DWORD numThreads = 4;
     HANDLE hThreads[numThreads];
@@ -299,6 +299,10 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
     _endthreadex(0);
 }
 
+int NSEQ_Processo = 1;
+int NSEQ_Otimizacao = 1;
+int NSEQ_Alarme = 1;
+
 void genDadosProcesso(char*);
 void genAlarme(char*);
 void genDadosOtimizacao(char*);
@@ -338,27 +342,31 @@ void InitializeTimers()
         exit(EXIT_FAILURE);
     }
 }
-void StopTimers()
+void StopTimers(BOOL apenasDados = false)
 {
 	BOOL status;
 
+    if (!apenasDados)
+    {
+		status = DeleteTimerQueueTimer(hTimerQueue, hTimerAlarme, NULL); 
+		//if (!status){
+		//	cc_printf(CCRED, "[Leitura] Erro ao deletar TimerAlarme! Codigo = %d)\n", GetLastError());
+		//	exit(EXIT_FAILURE);
+		//}
+    }
+
 	status = DeleteTimerQueueTimer(hTimerQueue, hTimerProcesso, NULL); 
-    if (!status){
-		cc_printf(CCRED, "[Leitura] Erro ao deletar TimerProcesso! Codigo = %d)\n", GetLastError());
-		exit(EXIT_FAILURE);
-	}
+	//if (!status){
+	//	cc_printf(CCRED, "[Leitura] Erro ao deletar TimerProcesso! Codigo = %d)\n", GetLastError());
+	//	exit(EXIT_FAILURE);
+	//}
 
 	status = DeleteTimerQueueTimer(hTimerQueue, hTimerOtimizacao, NULL); 
-    if (!status){
-		cc_printf(CCRED, "[Leitura] Erro ao deletar TimerOtimizacao! Codigo = %d)\n", GetLastError());
-		exit(EXIT_FAILURE);
-	}
+ //   if (!status){
+	//	cc_printf(CCRED, "[Leitura] Erro ao deletar TimerOtimizacao! Codigo = %d)\n", GetLastError());
+	//	exit(EXIT_FAILURE);
+	//}
 
-	status = DeleteTimerQueueTimer(hTimerQueue, hTimerAlarme, NULL); 
-    if (!status){
-		cc_printf(CCRED, "[Leitura] Erro ao deletar TimerAlarme! Codigo = %d)\n", GetLastError());
-		exit(EXIT_FAILURE);
-	}
 }
 
 void WINAPI ThreadLeituraDados(LPVOID tArgs)
@@ -408,11 +416,50 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
 void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
-    cc_printf(CCBLUE, "[Leitura] Ler Processo Teste\n");
+    HANDLE hEvents[2] = { hTerminateEvent, hSemMemoriaLeitura };
+    DWORD dwRet;
+    DWORD numEvent;
+    int memoria_ret;
+	BOOL status;
+
+    char msg[MAX_MSG];
+
+	genDadosProcesso(msg);
+
+	EnterCriticalSection(&csListaCircularIO);
+	memoria_ret = listaCircular.guardarDadoProcesso(msg);
+	LeaveCriticalSection(&csListaCircularIO);
+
+    if (memoria_ret != MEMORY_FULL) 
+    {
+        NSEQ_Processo = 1 + (NSEQ_Processo % 9999);
+		cc_printf(CCGREEN, "[Leitura] Dado de processo armazenado\n");
+		SetEvent(hNovosDadosProcessoEvent);
+    }
+    else
+    {
+        StopTimers(true);
+		cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
+
+        // esvazia semáforo
+		dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+		numEvent = dwRet - WAIT_OBJECT_0;
+
+		if (numEvent == 1) {
+            // aguarda thread de captura liberar uma vaga
+			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+			numEvent = dwRet - WAIT_OBJECT_0;
+
+			if (numEvent == 1) {
+				cc_printf(CCGREEN, "Teste\n");
+			}
+		}
+    }
 }
 void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
-    cc_printf(CCGREEN, "[Leitura] Ler Otimizacao Teste\n");
+    //cc_printf(CCGREEN, "[Leitura] Ler Otimizacao Teste\n");
+    return;
 }
 void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
@@ -428,8 +475,6 @@ void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 
 void genDadosProcesso(char* msg)
 {
-	static int NSEQ = 1;
-
     int TIPO = 55;
     double T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO;
     SYSTEMTIME TIMESTAMP;
@@ -443,34 +488,15 @@ void genDadosProcesso(char* msg)
     if (T_ZONA_A < 1000) // mantém a mensagem fixa em 42 caracteres
     {
 		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$0%04.1f$%04.1f$%02.1f$%02d:%02d:%02d", 
-			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
+			NSEQ_Processo, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
     else
     {
 		sprintf_s(msg, MAX_MSG, "%04d$%02d$%04.1f$%04.1f$%04.1f$%02.1f$%02d:%02d:%02d", 
-			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
+			NSEQ_Processo, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
-
-	NSEQ = 1 + (NSEQ % 9999);
-}
-void genAlarme(char* msg)
-{
-	static int NSEQ = 1;
-
-    int TIPO = 99;
-    int CODIGO;
-    SYSTEMTIME TIMESTAMP;
-
-    CODIGO = round(RandReal(0, 99));
-	GetLocalTime(&TIMESTAMP);
-
-	sprintf_s(msg, MAX_MSG, "%04d$%02d$%02d$%02d:%02d:%02d", 
-		NSEQ, TIPO, CODIGO,
-		TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
-
-	NSEQ = 1 + (NSEQ % 9999);
 }
 void genDadosOtimizacao(char* msg) 
 {
@@ -497,6 +523,23 @@ void genDadosOtimizacao(char* msg)
 			NSEQ, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
 			TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
     }
+
+	NSEQ = 1 + (NSEQ % 9999);
+}
+void genAlarme(char* msg)
+{
+	static int NSEQ = 1;
+
+    int TIPO = 99;
+    int CODIGO;
+    SYSTEMTIME TIMESTAMP;
+
+    CODIGO = round(RandReal(0, 99));
+	GetLocalTime(&TIMESTAMP);
+
+	sprintf_s(msg, MAX_MSG, "%04d$%02d$%02d$%02d:%02d:%02d", 
+		NSEQ, TIPO, CODIGO,
+		TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
 
 	NSEQ = 1 + (NSEQ % 9999);
 }
