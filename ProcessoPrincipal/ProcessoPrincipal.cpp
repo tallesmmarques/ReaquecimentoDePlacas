@@ -94,7 +94,9 @@ HANDLE hMemoryFullEvent;
 HANDLE hMemorySpaceEvent;
 
 HANDLE hMailSlotProcessoCreatedEvent;
+HANDLE hMailSlotOtimizacaoCreatedEvent;
 HANDLE hNovaMensagemProcesso;
+HANDLE hNovaMensagemOtimizacao;
 
 // Globais
 ListaCircular listaCircular;
@@ -144,8 +146,12 @@ int main()
 
     hMailSlotProcessoCreatedEvent = CreateEvent(NULL, TRUE, FALSE, "MailSlotProcessoCreatedEvent");
     CheckForError(hMailSlotProcessoCreatedEvent);
+    hMailSlotOtimizacaoCreatedEvent = CreateEvent(NULL, TRUE, FALSE, "MailSlotOtimizacaoCreatedEvent");
+    CheckForError(hMailSlotOtimizacaoCreatedEvent);
     hNovaMensagemProcesso = CreateEvent(NULL, TRUE, FALSE, "NovaMensagemProcesso");
     CheckForError(hNovaMensagemProcesso);
+    hNovaMensagemOtimizacao = CreateEvent(NULL, TRUE, FALSE, "NovaMensagemOtimizacao");
+    CheckForError(hNovaMensagemOtimizacao);
 
     DWORD status;
 
@@ -425,14 +431,16 @@ void StopTimers(BOOL apenasDados = FALSE)
 }
 
 HANDLE hMailSlotProcesso;
+HANDLE hMailSlotOtimizacao;
 
 void WINAPI ThreadLeituraDados(LPVOID tArgs)
 {
 	cc_printf(CCWHITE, "[I] Thread Leitura de Dados inicializada\n");
 
-    HANDLE hInitEvents[2] = { hMailSlotProcessoCreatedEvent, hTerminateEvent };
-    HANDLE hEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hMemoryFullEvent };
-	HANDLE hMemoriaEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hMemorySpaceEvent };
+    HANDLE hInitProcessoEvents[2]   = { hMailSlotProcessoCreatedEvent, hTerminateEvent };
+    HANDLE hInitOtimizacaoEvents[2] = { hMailSlotOtimizacaoCreatedEvent, hTerminateEvent };
+    HANDLE hEvents[3]               = { hBlockLeituraEvent, hTerminateEvent, hMemoryFullEvent };
+	HANDLE hMemoriaEvents[3]        = { hBlockLeituraEvent, hTerminateEvent, hMemorySpaceEvent };
     DWORD dwRet;
     DWORD numEvent;
 
@@ -440,10 +448,10 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
     BOOL blockAll = FALSE;
     BOOL blockDados = FALSE;
 
-    dwRet = WaitForMultipleObjects(2, hInitEvents, FALSE, INFINITE);
+    dwRet = WaitForMultipleObjects(2, hInitProcessoEvents, FALSE, INFINITE);
     numEvent = dwRet - WAIT_OBJECT_0;
 
-    if (numEvent == 0) // MailSlot criada
+    if (numEvent == 0) // MailSlot processo criada
     {
         ResetEvent(hMailSlotProcessoCreatedEvent);
 
@@ -451,61 +459,73 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
             GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
         CheckForError(hMailSlotProcesso);
 
-		hTimerQueue = CreateTimerQueue();
-		if (hTimerQueue == NULL){
-			cc_printf(CCRED, "[Leitura] Falha em CreateTimerQueue! Codigo =%d)\n", GetLastError());
-			exit(EXIT_FAILURE);
-		}
-		InitializeTimers();
-		
-		do {
-			dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-			numEvent = dwRet - WAIT_OBJECT_0;
+		dwRet = WaitForMultipleObjects(2, hInitOtimizacaoEvents, FALSE, INFINITE);
+		numEvent = dwRet - WAIT_OBJECT_0;
 
-			if (numEvent == 2) // hMemoryFullEvent - bloqueio por memória cheia
-			{
-				if (blockDados == FALSE)
-				{
-					blockDados = TRUE;
-					StopTimers(TRUE);
-					cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
-				}
-				if (blockDados == TRUE)
-				{
-					dwRet = WaitForMultipleObjects(3, hMemoriaEvents, FALSE, INFINITE);
-					numEvent = dwRet - WAIT_OBJECT_0;
+        if (numEvent == 0) // MailSlot otimizacao criada
+        {
+            ResetEvent(hMailSlotOtimizacaoCreatedEvent);
 
-					if (numEvent == 2) // hMemorySpaceEvent - espaço liberado na memória
-					{
-						ResetEvent(hMemoryFullEvent);
-						blockDados = FALSE;
-						if (blockAll != TRUE) InitializeTimers(); // liberado para leitura mas thread está bloqueada
-					}
-				}
-			}
+            hMailSlotOtimizacao = CreateFile("\\\\.\\mailslot\\otimizacao",
+                GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            CheckForError(hMailSlotOtimizacao);
 
-			if (numEvent == 0) // hBlockLeituraEvent - bloqueio da thread pelo usuário
-			{
-				ResetEvent(hBlockLeituraEvent);
+            hTimerQueue = CreateTimerQueue();
+            if (hTimerQueue == NULL) {
+                cc_printf(CCRED, "[Leitura] Falha em CreateTimerQueue! Codigo =%d)\n", GetLastError());
+                exit(EXIT_FAILURE);
+            }
+            InitializeTimers();
 
-				if (blockAll == FALSE)
-				{
-					blockAll = TRUE;
-					StopTimers();
-					cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
-				}
-				else
-				{
-					blockAll = FALSE;
-					if (blockDados) InitializeTimers(true); // apenas alarme pois a memória está cheia
-					else InitializeTimers();
-					cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
-				}
-			}
-		} while (numEvent != 1); // hTerminateEvent - ESC pressionado
-	 
-		if (!DeleteTimerQueueEx(hTimerQueue, NULL))
-			cc_printf(CCRED, "[Leitura] Falha em DeleteTimerQueue! Codigo = %d\n", GetLastError());
+            do {
+                dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+                numEvent = dwRet - WAIT_OBJECT_0;
+
+                if (numEvent == 2) // hMemoryFullEvent - bloqueio por memória cheia
+                {
+                    if (blockDados == FALSE)
+                    {
+                        blockDados = TRUE;
+                        StopTimers(TRUE);
+                        cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
+                    }
+                    if (blockDados == TRUE)
+                    {
+                        dwRet = WaitForMultipleObjects(3, hMemoriaEvents, FALSE, INFINITE);
+                        numEvent = dwRet - WAIT_OBJECT_0;
+
+                        if (numEvent == 2) // hMemorySpaceEvent - espaço liberado na memória
+                        {
+                            ResetEvent(hMemoryFullEvent);
+                            blockDados = FALSE;
+                            if (blockAll != TRUE) InitializeTimers(); // liberado para leitura mas thread está bloqueada
+                        }
+                    }
+                }
+
+                if (numEvent == 0) // hBlockLeituraEvent - bloqueio da thread pelo usuário
+                {
+                    ResetEvent(hBlockLeituraEvent);
+
+                    if (blockAll == FALSE)
+                    {
+                        blockAll = TRUE;
+                        StopTimers();
+                        cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
+                    }
+                    else
+                    {
+                        blockAll = FALSE;
+                        if (blockDados) InitializeTimers(true); // apenas alarme pois a memória está cheia
+                        else InitializeTimers();
+                        cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
+                    }
+                }
+            } while (numEvent != 1); // hTerminateEvent - ESC pressionado
+
+            if (!DeleteTimerQueueEx(hTimerQueue, NULL))
+                cc_printf(CCRED, "[Leitura] Falha em DeleteTimerQueue! Codigo = %d\n", GetLastError());
+        }
     }
 
     cc_printf(CCRED, "[S] Saindo da thread Leitura de Dados\n");
@@ -700,6 +720,7 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 {
 	cc_printf(CCWHITE, "[I] Thread Captura de Dados de Otimizacao inicializada\n");
 
+    HANDLE hInitEvents[2] = { hMailSlotOtimizacaoCreatedEvent, hTerminateEvent };
     HANDLE hEvents[3] = { hBlockCapOtimizacaoEvent, hTerminateEvent, hNovosDadosOtimizacaoEvent };
     DWORD dwRet;
     DWORD numEvent;
@@ -707,38 +728,46 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
     int ret;
     char msg[MAX_MSG];
 
-    do {
-        dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-        numEvent = dwRet - WAIT_OBJECT_0;
+    dwRet = WaitForMultipleObjects(2, hInitEvents, FALSE, INFINITE);
+    numEvent = dwRet - WAIT_OBJECT_0;
 
-        if (numEvent == 2)
-        {
-            ResetEvent(hNovosDadosOtimizacaoEvent);
-            do {
-				EnterCriticalSection(&csListaCircularIO);
-			    ret = listaCircular.lerDadoOtimizacao(msg);
-				LeaveCriticalSection(&csListaCircularIO);
-                if (ret == MEMORY_EMPTY) break;
+    if (numEvent == 0) // MailSlot criada
+    {
+        do {
+            dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+            numEvent = dwRet - WAIT_OBJECT_0;
 
-				cc_printf(CCBLUE, "[Otimizacao] %s\n", msg);
-                PulseEvent(hMemorySpaceEvent);
-            } while (ret != MEMORY_EMPTY);
-        }
-        else if (numEvent == 0)
-        {
-			ResetEvent(hBlockCapOtimizacaoEvent);
+            if (numEvent == 2)
+            {
+                ResetEvent(hNovosDadosOtimizacaoEvent);
+                do {
+                    EnterCriticalSection(&csListaCircularIO);
+                    ret = listaCircular.lerDadoOtimizacao(msg);
+                    LeaveCriticalSection(&csListaCircularIO);
+                    if (ret == MEMORY_EMPTY) break;
 
-			cc_printf(CCWHITE, "Tarefa de Captura de Dados de Otimizacao bloqueada\n");
-			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-			numEvent = dwRet - WAIT_OBJECT_0;
-			if (numEvent == 0)
-			{
-				ResetEvent(hBlockCapOtimizacaoEvent);
-				cc_printf(CCWHITE, "Tarefa de Captura de Dados de Otimizacao desbloqueada\n");
-                SetEvent(hNovosDadosOtimizacaoEvent);
-			}
-        }
-    } while (numEvent != 1);
+                    //cc_printf(CCBLUE, "[Otimizacao] %s\n", msg);
+					WriteMailSlot(hMailSlotOtimizacao, msg);
+					SetEvent(hNovaMensagemOtimizacao);
+                    PulseEvent(hMemorySpaceEvent);
+                } while (ret != MEMORY_EMPTY);
+            }
+            else if (numEvent == 0)
+            {
+                ResetEvent(hBlockCapOtimizacaoEvent);
+
+                cc_printf(CCWHITE, "Tarefa de Captura de Dados de Otimizacao bloqueada\n");
+                dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+                numEvent = dwRet - WAIT_OBJECT_0;
+                if (numEvent == 0)
+                {
+                    ResetEvent(hBlockCapOtimizacaoEvent);
+                    cc_printf(CCWHITE, "Tarefa de Captura de Dados de Otimizacao desbloqueada\n");
+                    SetEvent(hNovosDadosOtimizacaoEvent);
+                }
+            }
+        } while (numEvent != 1);
+    }
 
     cc_printf(CCRED, "[S] Saindo da thread Captura de Dados de Otimizacao\n");
     _endthreadex(0);

@@ -9,6 +9,7 @@
 #include <process.h>
 #include <math.h>
 #include <locale.h>
+#include "Mensagem.h"
 
 // Constantes
 #define ESC 27
@@ -48,9 +49,47 @@ void cc_printf(const int color, const char* format, ...)
 	LeaveCriticalSection(&csConsole);
 }
 
+#define NO_MESSAGE 1
+#define ERROR_MAILSLOT_INFO 2
+#define ERROR_MAILSLOT_READ 3
+int ReadMailSlot(HANDLE hSlot, char* msg, int* msgRestantes)
+{
+    BOOL status;
+    DWORD tamanhoProximaMensagem, numMensagens;
+    DWORD cAllMessages;
+    OVERLAPPED ov;
+    TCHAR buffer[MAX_MSG];
+
+    tamanhoProximaMensagem = numMensagens = 0;
+
+    status = GetMailslotInfo(hSlot, NULL, &tamanhoProximaMensagem, &numMensagens, NULL);
+    if (!status)
+    {
+        cc_printf(CCRED, "Erro ao obter informacoes do mailslot, codigo = %d\n", GetLastError());
+        return ERROR_MAILSLOT_INFO;
+    }
+
+    if (tamanhoProximaMensagem == MAILSLOT_NO_MESSAGE)
+        return NO_MESSAGE;
+
+    status = ReadFile(hSlot, msg, tamanhoProximaMensagem, 0, NULL);
+    if (!status)
+    {
+        cc_printf(CCRED, "Erro ao ler mensagem na mailslot, codigo = %d\n", GetLastError());
+        return ERROR_MAILSLOT_READ;
+    }
+
+    *msgRestantes = numMensagens - 1;
+
+    return 0;
+}
+
 HANDLE hTerminateEvent;
 HANDLE hBlockExOtimizacaoEvent;
 HANDLE hClearConsoleEvent;
+HANDLE hMailSlotOtimizacaoCreatedEvent;
+HANDLE hMailSlot;
+HANDLE hNovaMensagemOtimizacao;
 
 int main()
 {
@@ -72,13 +111,24 @@ int main()
     CheckForError(hBlockExOtimizacaoEvent);
     hClearConsoleEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "ClearConsoleEvent");
     CheckForError(hClearConsoleEvent);
+    hMailSlotOtimizacaoCreatedEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "MailSlotOtimizacaoCreatedEvent");
+    CheckForError(hMailSlotOtimizacaoCreatedEvent);
+    hNovaMensagemOtimizacao = OpenEvent(EVENT_ALL_ACCESS, TRUE, "NovaMensagemOtimizacao");
+    CheckForError(hNovaMensagemOtimizacao);
 
-	HANDLE hEvents[3] = { hBlockExOtimizacaoEvent, hTerminateEvent, hClearConsoleEvent };
+    hMailSlot = CreateMailslot("\\\\.\\mailslot\\otimizacao", 0, MAILSLOT_WAIT_FOREVER, NULL);
+    CheckForError(hMailSlot);
+    SetEvent(hMailSlotOtimizacaoCreatedEvent);
+
+	HANDLE hEvents[4] = { hBlockExOtimizacaoEvent, hTerminateEvent, hClearConsoleEvent, hNovaMensagemOtimizacao };
     DWORD dwRet, numEvent;
+    int status;
+	int msgRestantes = 0;
+    char msg[MAX_MSG];
     
     BOOL bloqueada = FALSE;
     do {
-		dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+		dwRet = WaitForMultipleObjects(4, hEvents, FALSE, INFINITE);
 		numEvent = dwRet - WAIT_OBJECT_0;
 
         if (bloqueada && numEvent == 0) // desbloqueio
@@ -86,6 +136,7 @@ int main()
 			ResetEvent(hBlockExOtimizacaoEvent);
 			bloqueada = FALSE;
 			cc_printf(CCWHITE, "Tarefa de Exibicao de Dados de Otimizacao desbloqueada\n");
+            SetEvent(hNovaMensagemOtimizacao);
         }
         else if (!bloqueada && numEvent == 0) // bloqueio
         {
@@ -99,6 +150,27 @@ int main()
             ResetEvent(hClearConsoleEvent);
             system("cls");
 		}
+
+        if (numEvent == 3) // nova mensagem
+        {
+            if (!bloqueada)
+            {
+                do {
+                    status = ReadMailSlot(hMailSlot, msg, &msgRestantes);
+                    if (status == ERROR_MAILSLOT_INFO || status == ERROR_MAILSLOT_READ)
+                        SetEvent(hTerminateEvent);
+                    if (status == NO_MESSAGE) break;
+
+                    Mensagem mensagem(msg);
+                    if (mensagem.TIPO == 01) // Otimizacao
+                        cc_printf(CCBLUE, "%s\n", mensagem.getMensagemFormatada().c_str());
+                    else
+                        cc_printf(CCRED, "Tipo desconhecido de mensagem recebida - %s\n",
+                            mensagem.getMensagemFormatada().c_str());
+                } while (msgRestantes > 0);
+            }
+            ResetEvent(hNovaMensagemOtimizacao);
+        }
     } while (numEvent != 1); // ESC precionado no terminal principal
 
     CloseHandle(hBlockExOtimizacaoEvent);

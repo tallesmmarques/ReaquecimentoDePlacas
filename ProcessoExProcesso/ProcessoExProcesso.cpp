@@ -115,7 +115,6 @@ int main()
 
     hMailSlot = CreateMailslot("\\\\.\\mailslot\\processo", 0, MAILSLOT_WAIT_FOREVER, NULL);
     CheckForError(hMailSlot);
-    //Sleep(1000);
     SetEvent(hMailSlotProcessoCreatedEvent);
 
     HANDLE hEvents[3] = { hBlockExProcessoEvent, hTerminateEvent, hNovaMensagemProcesso };
