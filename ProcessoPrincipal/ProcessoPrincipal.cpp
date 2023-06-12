@@ -316,9 +316,9 @@ void CALLBACK LerAlarme(PVOID, BOOLEAN);
 
 HANDLE hTimerQueue;
 HANDLE hTimerProcesso, hTimerOtimizacao, hTimerAlarme;
-const int msPeriodProcesso      = 1000;
-const int msPeriodOtimizacao    = 1000;
-const int msPeriodAlarme        = 1000;
+const int msPeriodProcesso  = 500;
+int msPeriodOtimizacao      = 1000;
+int msPeriodAlarme          = 1000;
 
 // Impede que Timer sejam apagados novamente ou criados novamente
 BOOL ProcessoRodando    = FALSE;
@@ -498,6 +498,7 @@ void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 }
 void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
+    BOOL status;
     int memoria_ret;
     char msg[MAX_MSG];
 
@@ -515,6 +516,14 @@ void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 
     if (memoria_ret != MEMORY_FULL) 
     {
+		msPeriodOtimizacao = int(RandReal(1000, 5000));
+		status = ChangeTimerQueueTimer(hTimerQueue, hTimerOtimizacao, msPeriodOtimizacao, msPeriodOtimizacao);
+		if (!status)
+		{
+			cc_printf(CCRED, "[Leitura] Erro ao alterar período de leitura de Otimizacoes");
+			exit(EXIT_FAILURE);
+		}
+
         NSEQ_Otimizacao = 1 + (NSEQ_Otimizacao % 9999);
 		SetEvent(hNovosDadosOtimizacaoEvent);
 		//cc_printf(CCBLUE, "[Leitura] Dado de otimizacao armazenado\n");
@@ -525,11 +534,22 @@ void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
     HANDLE hEvents[2] = { hBlockLeituraEvent, hTerminateEvent };
     DWORD dwRet;
     DWORD numEvent;
+    BOOL status;
 
     char msg[MAX_MSG];
 
 	genAlarme(msg);
 	cc_printf(CCREDI, "[Leitura] %s\n", msg);
+
+    msPeriodAlarme = int(RandReal(1000, 5000));
+    status = ChangeTimerQueueTimer(hTimerQueue, hTimerAlarme, msPeriodAlarme, msPeriodAlarme);
+    if (!status)
+    {
+        cc_printf(CCRED, "[Leitura] Erro ao alterar período de leitura de Alarmes");
+        exit(EXIT_FAILURE);
+    }
+
+	NSEQ_Alarme = 1 + (NSEQ_Alarme % 9999);
 }
 
 void genDadosProcesso(char* msg)
@@ -565,8 +585,6 @@ void genDadosOtimizacao(char* msg)
 }
 void genAlarme(char* msg)
 {
-	static int NSEQ = 1;
-
     int TIPO = 99;
     int CODIGO;
     SYSTEMTIME TIMESTAMP;
@@ -575,10 +593,8 @@ void genAlarme(char* msg)
 	GetLocalTime(&TIMESTAMP);
 
 	sprintf_s(msg, MAX_MSG, "%04d$%02d$%02d$%02d:%02d:%02d", 
-		NSEQ, TIPO, CODIGO,
+		NSEQ_Alarme, TIPO, CODIGO,
 		TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
-
-	NSEQ = 1 + (NSEQ % 9999);
 }
 
 void WINAPI ThreadCapturaProcesso(LPVOID)
