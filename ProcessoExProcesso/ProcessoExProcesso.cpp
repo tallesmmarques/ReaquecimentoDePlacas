@@ -9,6 +9,7 @@
 #include <process.h>
 #include <math.h>
 #include <locale.h>
+#include "Mensagem.h"
 
 // Constantes
 #define ESC 27
@@ -150,7 +151,14 @@ int main()
                     SetEvent(hTerminateEvent);
                 if (status == NO_MESSAGE) break;
 
-				cc_printf(CCREDI, "%s -- %d\n", msg, msgRestantes);
+                Mensagem mensagem(msg);
+                if (mensagem.TIPO == 99) // Alarme
+                    cc_printf(CCREDI, "%s\n", mensagem.getMensagemFormatada().c_str());
+                else if (mensagem.TIPO == 55) // Processo
+                    cc_printf(CCGREEN, "%s\n", mensagem.getMensagemFormatada().c_str());
+                else
+                    cc_printf(CCRED, "Tipo desconhecido de mensagem recebida - %s\n",
+                        mensagem.getMensagemFormatada().c_str());
             } while (msgRestantes > 0);
             ResetEvent(hNovaMensagemProcesso);
         }

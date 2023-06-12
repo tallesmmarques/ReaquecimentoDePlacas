@@ -579,7 +579,7 @@ void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
     char msg[MAX_MSG];
 
 	genAlarme(msg);
-	cc_printf(CCREDI, "[Leitura] %s\n", msg);
+	//cc_printf(CCREDI, "[Leitura] %s\n", msg);
     WriteMailSlot(hMailSlotProcesso, msg);
     SetEvent(hNovaMensagemProcesso);
 
@@ -643,6 +643,7 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
 {
 	cc_printf(CCWHITE, "[I] Thread Captura de Dados de Processo inicializada\n");
 
+    HANDLE hInitEvents[2] = { hMailSlotProcessoCreatedEvent, hTerminateEvent };
     HANDLE hEvents[3] = { hBlockCapProcessoEvent, hTerminateEvent, hNovosDadosProcessoEvent };
     DWORD dwRet;
     DWORD numEvent;
@@ -650,38 +651,46 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
     int ret;
     char msg[MAX_MSG];
 
-    do {
-        dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-        numEvent = dwRet - WAIT_OBJECT_0;
+    dwRet = WaitForMultipleObjects(2, hInitEvents, FALSE, INFINITE);
+    numEvent = dwRet - WAIT_OBJECT_0;
 
-        if (numEvent == 2)
-        {
-            ResetEvent(hNovosDadosProcessoEvent);
-            do {
-				EnterCriticalSection(&csListaCircularIO);
-			    ret = listaCircular.lerDadoProcesso(msg);
-				LeaveCriticalSection(&csListaCircularIO);
-                if (ret == MEMORY_EMPTY) break;
+    if (numEvent == 0) // MailSlot criada
+    {
+        do {
+            dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+            numEvent = dwRet - WAIT_OBJECT_0;
 
-				cc_printf(CCGREEN, "[Processo] %s\n", msg);
-                PulseEvent(hMemorySpaceEvent);
-            } while (ret != MEMORY_EMPTY);
-        }
-        else if (numEvent == 0)
-        {
-			ResetEvent(hBlockCapProcessoEvent);
+            if (numEvent == 2)
+            {
+                ResetEvent(hNovosDadosProcessoEvent);
+                do {
+                    EnterCriticalSection(&csListaCircularIO);
+                    ret = listaCircular.lerDadoProcesso(msg);
+                    LeaveCriticalSection(&csListaCircularIO);
+                    if (ret == MEMORY_EMPTY) break;
 
-			cc_printf(CCWHITE, "Tarefa de Captura de Dados de Processo bloqueada\n");
-			dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-			numEvent = dwRet - WAIT_OBJECT_0;
-			if (numEvent == 0)
-			{
-				ResetEvent(hBlockCapProcessoEvent);
-				cc_printf(CCWHITE, "Tarefa de Captura de Dados de Processo desbloqueada\n");
-                SetEvent(hNovosDadosProcessoEvent);
-			}
-        }
-    } while (numEvent != 1);
+                    //cc_printf(CCGREEN, "[Processo] %s\n", msg);
+					WriteMailSlot(hMailSlotProcesso, msg);
+					SetEvent(hNovaMensagemProcesso);
+                    PulseEvent(hMemorySpaceEvent);
+                } while (ret != MEMORY_EMPTY);
+            }
+            else if (numEvent == 0)
+            {
+                ResetEvent(hBlockCapProcessoEvent);
+
+                cc_printf(CCWHITE, "Tarefa de Captura de Dados de Processo bloqueada\n");
+                dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+                numEvent = dwRet - WAIT_OBJECT_0;
+                if (numEvent == 0)
+                {
+                    ResetEvent(hBlockCapProcessoEvent);
+                    cc_printf(CCWHITE, "Tarefa de Captura de Dados de Processo desbloqueada\n");
+                    SetEvent(hNovosDadosProcessoEvent);
+                }
+            }
+        } while (numEvent != 1);
+    }
 
     cc_printf(CCRED, "[S] Saindo da thread Captura de Dados de Processo\n");
     _endthreadex(0);
