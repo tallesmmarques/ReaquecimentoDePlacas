@@ -61,6 +61,22 @@ void cc_printf(const int color, const char* format, ...)
 	LeaveCriticalSection(&csConsole);
 }
 
+BOOL WriteMailSlot(HANDLE hSlot, char* msg)
+{
+    BOOL status;
+
+	status = WriteFile(hSlot, 
+        msg, (DWORD) lstrlen(msg)+1,  NULL, NULL); 
+
+	if (!status) 
+	{ 
+	  cc_printf(CCRED, "Erro ao escrever no mailslot, codigo =%d\n", GetLastError()); 
+	  return FALSE; 
+	} 
+
+	return TRUE;
+}
+
 HANDLE hTerminateEvent;
 
 HANDLE hBlockLeituraEvent;
@@ -76,6 +92,9 @@ HANDLE hNovosDadosProcessoEvent;
 HANDLE hNovosDadosOtimizacaoEvent;
 HANDLE hMemoryFullEvent;
 HANDLE hMemorySpaceEvent;
+
+HANDLE hMailSlotProcessoCreatedEvent;
+HANDLE hNovaMensagemProcesso;
 
 // Globais
 ListaCircular listaCircular;
@@ -123,6 +142,11 @@ int main()
     hClearConsoleEvent = CreateEvent(NULL, TRUE, FALSE, "ClearConsoleEvent");
     CheckForError(hClearConsoleEvent);
 
+    hMailSlotProcessoCreatedEvent = CreateEvent(NULL, TRUE, FALSE, "MailSlotProcessoCreatedEvent");
+    CheckForError(hMailSlotProcessoCreatedEvent);
+    hNovaMensagemProcesso = CreateEvent(NULL, TRUE, FALSE, "NovaMensagemProcesso");
+    CheckForError(hNovaMensagemProcesso);
+
     DWORD status;
 
 	STARTUPINFO siExP;
@@ -131,18 +155,18 @@ int main()
     ZeroMemory(&siExP, sizeof(siExP));
     siExP.cb = sizeof(siExP);
     ZeroMemory(&piExP, sizeof(piExP));
-    //status = CreateProcess(
-    //    NULL,
-    //    "ProcessoExProcesso.exe",
-    //    NULL,
-    //    NULL,
-    //    TRUE,
-    //    CREATE_NEW_CONSOLE,
-    //    NULL,
-    //    NULL,
-    //    &siExP,
-    //    &piExP
-    //);
+    status = CreateProcess(
+        NULL,
+        "ProcessoExProcesso.exe",
+        NULL,
+        NULL,
+        TRUE,
+        CREATE_NEW_CONSOLE,
+        NULL,
+        NULL,
+        &siExP,
+        &piExP
+    );
 
 	STARTUPINFO siExO;
     PROCESS_INFORMATION piExO;
@@ -150,18 +174,18 @@ int main()
     ZeroMemory(&siExO, sizeof(siExO));
     siExO.cb = sizeof(siExO);
     ZeroMemory(&piExO, sizeof(piExO));
-    //status = CreateProcess(
-    //    NULL,
-    //    "ProcessoExOtimizacao.exe",
-    //    NULL,
-    //    NULL,
-    //    TRUE,
-    //    CREATE_NEW_CONSOLE,
-    //    NULL,
-    //    NULL,
-    //    &siExO,
-    //    &piExO
-    //);
+    status = CreateProcess(
+        NULL,
+        "ProcessoExOtimizacao.exe",
+        NULL,
+        NULL,
+        TRUE,
+        CREATE_NEW_CONSOLE,
+        NULL,
+        NULL,
+        &siExO,
+        &piExO
+    );
 
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
@@ -225,20 +249,20 @@ int main()
 
     DWORD dwRet;
 
-    //const DWORD numProcess = 2;
-    //HANDLE hProcess[numProcess];
-    //hProcess[0] = piExP.hProcess;
-    //hProcess[1] = piExO.hProcess;
+    const DWORD numProcess = 2;
+    HANDLE hProcess[numProcess];
+    hProcess[0] = piExP.hProcess;
+    hProcess[1] = piExO.hProcess;
 
-    //dwRet = WaitForMultipleObjects(numProcess, hProcess, TRUE, INFINITE);
-    //CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numProcess));
-    //cc_printf(CCRED, "[S] Processo Exibicao de Dados de Processo encerrado \n");
-    //cc_printf(CCRED, "[S] Processo Exibicao de Dados de Otimizacao encerrado \n");
+    dwRet = WaitForMultipleObjects(numProcess, hProcess, TRUE, INFINITE);
+    CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numProcess));
+    cc_printf(CCRED, "[S] Processo Exibicao de Dados de Processo encerrado \n");
+    cc_printf(CCRED, "[S] Processo Exibicao de Dados de Otimizacao encerrado \n");
 
-    //CloseHandle(piExP.hProcess);
-    //CloseHandle(piExP.hThread);
-    //CloseHandle(piExO.hProcess);
-    //CloseHandle(piExO.hThread);
+    CloseHandle(piExP.hProcess);
+    CloseHandle(piExP.hThread);
+    CloseHandle(piExO.hProcess);
+    CloseHandle(piExO.hThread);
 
     const DWORD numThreads = 4;
     HANDLE hThreads[numThreads];
@@ -400,73 +424,89 @@ void StopTimers(BOOL apenasDados = FALSE)
     }
 }
 
+HANDLE hMailSlotProcesso;
+
 void WINAPI ThreadLeituraDados(LPVOID tArgs)
 {
 	cc_printf(CCWHITE, "[I] Thread Leitura de Dados inicializada\n");
+
+    HANDLE hInitEvents[2] = { hMailSlotProcessoCreatedEvent, hTerminateEvent };
+    HANDLE hEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hMemoryFullEvent };
+	HANDLE hMemoriaEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hMemorySpaceEvent };
+    DWORD dwRet;
+    DWORD numEvent;
 
 	BOOL status;
     BOOL blockAll = FALSE;
     BOOL blockDados = FALSE;
 
-	hTimerQueue = CreateTimerQueue();
-	if (hTimerQueue == NULL){
-        cc_printf(CCRED, "[Leitura] Falha em CreateTimerQueue! Codigo =%d)\n", GetLastError());
-        exit(EXIT_FAILURE);
+    dwRet = WaitForMultipleObjects(2, hInitEvents, FALSE, INFINITE);
+    numEvent = dwRet - WAIT_OBJECT_0;
+
+    if (numEvent == 0) // MailSlot criada
+    {
+        ResetEvent(hMailSlotProcessoCreatedEvent);
+
+        hMailSlotProcesso = CreateFile("\\\\.\\mailslot\\processo",
+            GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        CheckForError(hMailSlotProcesso);
+
+		hTimerQueue = CreateTimerQueue();
+		if (hTimerQueue == NULL){
+			cc_printf(CCRED, "[Leitura] Falha em CreateTimerQueue! Codigo =%d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+		InitializeTimers();
+		
+		do {
+			dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
+			numEvent = dwRet - WAIT_OBJECT_0;
+
+			if (numEvent == 2) // hMemoryFullEvent - bloqueio por memória cheia
+			{
+				if (blockDados == FALSE)
+				{
+					blockDados = TRUE;
+					StopTimers(TRUE);
+					cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
+				}
+				if (blockDados == TRUE)
+				{
+					dwRet = WaitForMultipleObjects(3, hMemoriaEvents, FALSE, INFINITE);
+					numEvent = dwRet - WAIT_OBJECT_0;
+
+					if (numEvent == 2) // hMemorySpaceEvent - espaço liberado na memória
+					{
+						ResetEvent(hMemoryFullEvent);
+						blockDados = FALSE;
+						if (blockAll != TRUE) InitializeTimers(); // liberado para leitura mas thread está bloqueada
+					}
+				}
+			}
+
+			if (numEvent == 0) // hBlockLeituraEvent - bloqueio da thread pelo usuário
+			{
+				ResetEvent(hBlockLeituraEvent);
+
+				if (blockAll == FALSE)
+				{
+					blockAll = TRUE;
+					StopTimers();
+					cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
+				}
+				else
+				{
+					blockAll = FALSE;
+					if (blockDados) InitializeTimers(true); // apenas alarme pois a memória está cheia
+					else InitializeTimers();
+					cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
+				}
+			}
+		} while (numEvent != 1); // hTerminateEvent - ESC pressionado
+	 
+		if (!DeleteTimerQueueEx(hTimerQueue, NULL))
+			cc_printf(CCRED, "[Leitura] Falha em DeleteTimerQueue! Codigo = %d\n", GetLastError());
     }
-    InitializeTimers();
-    
-    HANDLE hEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hMemoryFullEvent };
-	HANDLE hMemoriaEvents[3] = { hBlockLeituraEvent, hTerminateEvent, hMemorySpaceEvent };
-    DWORD dwRet;
-    DWORD numEvent;
-    do {
-		dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
-		numEvent = dwRet - WAIT_OBJECT_0;
-
-        if (numEvent == 2) // hMemoryFullEvent - bloqueio por memória cheia
-        {
-            if (blockDados == FALSE)
-            {
-                blockDados = TRUE;
-                StopTimers(TRUE);
-				cc_printf(CCPURPLE, "[Leitura] Lista circular cheia\n");
-            }
-            if (blockDados == TRUE)
-            {
-                dwRet = WaitForMultipleObjects(3, hMemoriaEvents, FALSE, INFINITE);
-                numEvent = dwRet - WAIT_OBJECT_0;
-
-                if (numEvent == 2) // hMemorySpaceEvent - espaço liberado na memória
-                {
-					ResetEvent(hMemoryFullEvent);
-					blockDados = FALSE;
-					if (blockAll != TRUE) InitializeTimers(); // liberado para leitura mas thread está bloqueada
-                }
-            }
-        }
-
-        if (numEvent == 0) // hBlockLeituraEvent - bloqueio da thread pelo usuário
-        {
-			ResetEvent(hBlockLeituraEvent);
-
-            if (blockAll == FALSE)
-            {
-                blockAll = TRUE;
-				StopTimers();
-				cc_printf(CCWHITE, "Tarefa de leitura de dados bloqueada\n");
-            }
-            else
-            {
-                blockAll = FALSE;
-                if (blockDados) InitializeTimers(true); // apenas alarme pois a memória está cheia
-                else InitializeTimers();
-				cc_printf(CCWHITE, "Tarefa de leitura de dados desbloqueada\n");
-            }
-        }
-    } while (numEvent != 1); // hTerminateEvent - ESC pressionado
- 
-	if (!DeleteTimerQueueEx(hTimerQueue, NULL))
-        cc_printf(CCRED, "[Leitura] Falha em DeleteTimerQueue! Codigo = %d\n", GetLastError());
 
     cc_printf(CCRED, "[S] Saindo da thread Leitura de Dados\n");
     _endthreadex(0);
@@ -540,6 +580,8 @@ void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 
 	genAlarme(msg);
 	cc_printf(CCREDI, "[Leitura] %s\n", msg);
+    WriteMailSlot(hMailSlotProcesso, msg);
+    SetEvent(hNovaMensagemProcesso);
 
     msPeriodAlarme = int(RandReal(1000, 5000));
     status = ChangeTimerQueueTimer(hTimerQueue, hTimerAlarme, msPeriodAlarme, msPeriodAlarme);

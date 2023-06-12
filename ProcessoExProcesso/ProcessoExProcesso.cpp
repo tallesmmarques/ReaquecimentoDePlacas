@@ -48,8 +48,46 @@ void cc_printf(const int color, const char* format, ...)
 	LeaveCriticalSection(&csConsole);
 }
 
+#define NO_MESSAGE 1
+#define ERROR_MAILSLOT_INFO 2
+#define ERROR_MAILSLOT_READ 3
+int ReadMailSlot(HANDLE hSlot, char* msg, int* msgRestantes)
+{
+    BOOL status;
+    DWORD tamanhoProximaMensagem, numMensagens;
+    DWORD cAllMessages;
+    OVERLAPPED ov;
+    TCHAR buffer[MAX_MSG];
+
+    tamanhoProximaMensagem = numMensagens = 0;
+
+    status = GetMailslotInfo(hSlot, NULL, &tamanhoProximaMensagem, &numMensagens, NULL);
+    if (!status)
+    {
+        cc_printf(CCRED, "Erro ao obter informacoes do mailslot, codigo = %d\n", GetLastError());
+        return ERROR_MAILSLOT_INFO;
+    }
+
+    if (tamanhoProximaMensagem == MAILSLOT_NO_MESSAGE)
+        return NO_MESSAGE;
+
+    status = ReadFile(hSlot, msg, tamanhoProximaMensagem, 0, NULL);
+    if (!status)
+    {
+        cc_printf(CCRED, "Erro ao ler mensagem na mailslot, codigo = %d\n", GetLastError());
+        return ERROR_MAILSLOT_READ;
+    }
+
+    *msgRestantes = numMensagens - 1;
+
+    return 0;
+}
+
 HANDLE hTerminateEvent;
 HANDLE hBlockExProcessoEvent;
+HANDLE hMailSlotProcessoCreatedEvent;
+HANDLE hMailSlot;
+HANDLE hNovaMensagemProcesso;
 
 int main()
 {
@@ -69,14 +107,24 @@ int main()
     CheckForError(hTerminateEvent);
     hBlockExProcessoEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "BlockExProcessoEvent");
     CheckForError(hBlockExProcessoEvent);
+    hMailSlotProcessoCreatedEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "MailSlotProcessoCreatedEvent");
+    CheckForError(hMailSlotProcessoCreatedEvent);
+    hNovaMensagemProcesso = OpenEvent(EVENT_ALL_ACCESS, TRUE, "NovaMensagemProcesso");
+    CheckForError(hNovaMensagemProcesso);
 
-    HANDLE hEvents[2] = { hBlockExProcessoEvent, hTerminateEvent };
+    hMailSlot = CreateMailslot("\\\\.\\mailslot\\processo", 0, MAILSLOT_WAIT_FOREVER, NULL);
+    CheckForError(hMailSlot);
+    //Sleep(1000);
+    SetEvent(hMailSlotProcessoCreatedEvent);
+
+    HANDLE hEvents[3] = { hBlockExProcessoEvent, hTerminateEvent, hNovaMensagemProcesso };
     DWORD dwRet, numEvent;
+    int status;
+	int msgRestantes = 0;
+    char msg[MAX_MSG];
     
     do {
-        dwRet = WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
-        ResetEvent(hBlockExProcessoEvent);
-		CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + 1));
+        dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
         numEvent = dwRet - WAIT_OBJECT_0;
 
         if (numEvent == 0) // bloqueio
@@ -90,12 +138,29 @@ int main()
 			{
 				ResetEvent(hBlockExProcessoEvent);
 				cc_printf(CCWHITE, "Tarefa de Exibicao de Dados de Processo desbloqueada\n");
+                SetEvent(hNovaMensagemProcesso);
 			}
+        }
+
+        if (numEvent == 2) // nova mensagem
+        {
+            do {
+                status = ReadMailSlot(hMailSlot, msg, &msgRestantes);
+                if (status == ERROR_MAILSLOT_INFO || status == ERROR_MAILSLOT_READ)
+                    SetEvent(hTerminateEvent);
+                if (status == NO_MESSAGE) break;
+
+				cc_printf(CCREDI, "%s -- %d\n", msg, msgRestantes);
+            } while (msgRestantes > 0);
+            ResetEvent(hNovaMensagemProcesso);
         }
     } while (numEvent != 1); // ESC precionado no terminal principal
 
     CloseHandle(hBlockExProcessoEvent);
     CloseHandle(hTerminateEvent);
+    CloseHandle(hMailSlot);
+    CloseHandle(hMailSlotProcessoCreatedEvent);
+    CloseHandle(hNovaMensagemProcesso);
 
     cc_printf(CCRED, "[S] Encerrando Processo de Exibição de Dados de Processo\n");
     exit(EXIT_SUCCESS);
