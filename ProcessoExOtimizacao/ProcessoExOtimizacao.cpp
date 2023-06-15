@@ -49,47 +49,72 @@ void cc_printf(const int color, const char* format, ...)
 	LeaveCriticalSection(&csConsole);
 }
 
-#define NO_MESSAGE 1
-#define ERROR_MAILSLOT_INFO 2
-#define ERROR_MAILSLOT_READ 3
-int ReadMailSlot(HANDLE hSlot, char* msg, int* msgRestantes)
-{
-    BOOL status;
-    DWORD tamanhoProximaMensagem, numMensagens;
-    DWORD cAllMessages;
-    OVERLAPPED ov;
-    TCHAR buffer[MAX_MSG];
-
-    tamanhoProximaMensagem = numMensagens = 0;
-
-    status = GetMailslotInfo(hSlot, NULL, &tamanhoProximaMensagem, &numMensagens, NULL);
-    if (!status)
-    {
-        cc_printf(CCRED, "Erro ao obter informacoes do mailslot, codigo = %d\n", GetLastError());
-        return ERROR_MAILSLOT_INFO;
-    }
-
-    if (tamanhoProximaMensagem == MAILSLOT_NO_MESSAGE)
-        return NO_MESSAGE;
-
-    status = ReadFile(hSlot, msg, tamanhoProximaMensagem, 0, NULL);
-    if (!status)
-    {
-        cc_printf(CCRED, "Erro ao ler mensagem na mailslot, codigo = %d\n", GetLastError());
-        return ERROR_MAILSLOT_READ;
-    }
-
-    *msgRestantes = numMensagens - 1;
-
-    return 0;
-}
-
 HANDLE hTerminateEvent;
 HANDLE hBlockExOtimizacaoEvent;
 HANDLE hClearConsoleEvent;
-HANDLE hMailSlotOtimizacaoCreatedEvent;
-HANDLE hMailSlot;
 HANDLE hNovaMensagemOtimizacao;
+
+HANDLE hArquivoMemoria;
+HANDLE hMutexArquivo;
+HANDLE hEspacoMemoriaArquivoEvent;
+#define MAX_MSG_FILE 50
+#define FILE_FULL 1
+#define OTIMIZACAO_SIZE 38
+const char HeaderInit[] = "00 00 00\n";
+const int HeaderSize = strlen(HeaderInit);
+
+#define NO_MESSAGE 1
+#define ERROR_ARQUIVO 2
+int ReadArquivoMemoria(char* msg, int* msgRestantes)
+{
+    TCHAR buffer[MAX_MSG];
+
+    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
+    if (FALSE == ReadFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
+    {
+		cc_printf(CCRED, "Erro ao ler cabecalho do arquivo\n");
+        return ERROR_ARQUIVO;
+    }
+    buffer[HeaderSize] = '\0';
+
+	std::istringstream iss(buffer);
+	std::string token;
+    int initLine, lastLine, numMsg;
+
+    std::getline(iss, token, ' ');
+    initLine = stoi(token);
+
+    std::getline(iss, token, ' ');
+    lastLine = stoi(token);
+
+    std::getline(iss, token, ' ');
+    numMsg = stoi(token);
+
+    *msgRestantes = numMsg;
+    if (numMsg == 0)
+        return NO_MESSAGE;
+
+    SetFilePointer(hArquivoMemoria, HeaderSize + initLine * OTIMIZACAO_SIZE, 0, FILE_BEGIN);
+    if (FALSE == ReadFile(hArquivoMemoria, msg, OTIMIZACAO_SIZE, 0, NULL))
+    {
+		cc_printf(CCRED, "Erro ao ler dados de otimizacao do arquivo\n");
+        return ERROR_ARQUIVO;
+    }
+    msg[OTIMIZACAO_SIZE - 1] = '\0';
+
+    initLine = (initLine + 1) % MAX_MSG_FILE;
+    numMsg--;
+    sprintf_s(buffer, HeaderSize+1, "%02d %02d %02d\n", initLine, lastLine, numMsg);
+
+    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
+    if (FALSE == WriteFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
+    {
+		cc_printf(CCRED, "Erro ao escrever no cabecalho do arquivo\n");
+        return ERROR_ARQUIVO;
+    }
+
+    return 0;
+}
 
 int main()
 {
@@ -111,14 +136,17 @@ int main()
     CheckForError(hBlockExOtimizacaoEvent);
     hClearConsoleEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "ClearConsoleEvent");
     CheckForError(hClearConsoleEvent);
-    hMailSlotOtimizacaoCreatedEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "MailSlotOtimizacaoCreatedEvent");
-    CheckForError(hMailSlotOtimizacaoCreatedEvent);
     hNovaMensagemOtimizacao = OpenEvent(EVENT_ALL_ACCESS, TRUE, "NovaMensagemOtimizacao");
     CheckForError(hNovaMensagemOtimizacao);
 
-    hMailSlot = CreateMailslot("\\\\.\\mailslot\\otimizacao", 0, MAILSLOT_WAIT_FOREVER, NULL);
-    CheckForError(hMailSlot);
-    SetEvent(hMailSlotOtimizacaoCreatedEvent);
+    hArquivoMemoria = CreateFile("otimizacao.data", 
+        GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    CheckForError(hArquivoMemoria != INVALID_HANDLE_VALUE);
+    hMutexArquivo = OpenMutex(MUTEX_ALL_ACCESS, TRUE, "MutexArquivo");
+    CheckForError(hMutexArquivo);
+    hEspacoMemoriaArquivoEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "EspacoMemoriaArquivoEvent");
+    CheckForError(hEspacoMemoriaArquivoEvent);
 
 	HANDLE hEvents[4] = { hBlockExOtimizacaoEvent, hTerminateEvent, hClearConsoleEvent, hNovaMensagemOtimizacao };
     DWORD dwRet, numEvent;
@@ -156,8 +184,11 @@ int main()
             if (!bloqueada)
             {
                 do {
-                    status = ReadMailSlot(hMailSlot, msg, &msgRestantes);
-                    if (status == ERROR_MAILSLOT_INFO || status == ERROR_MAILSLOT_READ)
+                    WaitForSingleObject(hMutexArquivo, INFINITE);
+                    status = ReadArquivoMemoria(msg, &msgRestantes);
+                    ReleaseMutex(hMutexArquivo);
+
+                    if (status == ERROR_ARQUIVO)
                         SetEvent(hTerminateEvent);
                     if (status == NO_MESSAGE) break;
 
@@ -169,6 +200,7 @@ int main()
                             mensagem.getMensagemFormatada().c_str());
                 } while (msgRestantes > 0);
             }
+            PulseEvent(hEspacoMemoriaArquivoEvent);
             ResetEvent(hNovaMensagemOtimizacao);
         }
     } while (numEvent != 1); // ESC precionado no terminal principal
