@@ -8,7 +8,6 @@
 #include <stdarg.h>
 #include <process.h>
 #include <math.h>
-#include <locale.h>
 #include "Mensagem.h"
 
 // Constantes
@@ -92,8 +91,6 @@ HANDLE hNovaMensagemProcesso;
 
 int main()
 {
-    setlocale(LC_ALL, "Portuguese");
-
     hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
         printf("Erro ao obter handle para escrita no console\n");

@@ -11,14 +11,17 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <process.h>
-#include <math.h>
-#include <locale.h>
 
 #include "ListaCircular.h"
+#include "Common.h"
 
 // Constantes
 #define ESC 27
 #define MAX_MSG 50
+#define MAX_MSG_FILE 50
+#define FILE_FULL 1
+const char HeaderInit[] = "00 00 00\n";
+const int HeaderSize = strlen(HeaderInit);
 
 // Utilitários
 #define _CHECKERROR    1        // Ativa função CheckForError
@@ -37,18 +40,7 @@ typedef unsigned* CAST_LPDWORD;
 HANDLE hOut;
 CRITICAL_SECTION csConsole;
 
-// Funções, Threads e Eventos
-void WINAPI ThreadLeituraTeclado(LPVOID);
-void WINAPI ThreadLeituraDados(LPVOID);
-void WINAPI ThreadCapturaProcesso(LPVOID);
-void WINAPI ThreadCapturaOtimizacao(LPVOID);
-
-double RandReal(double min, double max) 
-{
-    return min + double(rand()) / RAND_MAX * (max - min);
-}
-
-// printf colorido, e com exclusão mútua
+// printf colorido e com exclusão mútua
 void cc_printf(const int color, const char* format, ...)
 {
 	char buf[512];
@@ -63,53 +55,49 @@ void cc_printf(const int color, const char* format, ...)
 	LeaveCriticalSection(&csConsole);
 }
 
-BOOL WriteMailSlot(HANDLE hSlot, char* msg)
-{
-    BOOL status;
+// Threads
+void WINAPI ThreadLeituraTeclado(LPVOID);
+void WINAPI ThreadLeituraDados(LPVOID);
+void WINAPI ThreadCapturaProcesso(LPVOID);
+void WINAPI ThreadCapturaOtimizacao(LPVOID);
 
-	status = WriteFile(hSlot, 
-        msg, (DWORD) lstrlen(msg)+1,  NULL, NULL); 
-
-	if (!status) 
-	{ 
-	  cc_printf(CCRED, "Erro ao escrever no mailslot, codigo =%d\n", GetLastError()); 
-	  return FALSE; 
-	} 
-
-	return TRUE;
-}
-
+// Evento que sinaliza o termino de toda a aplicação
 HANDLE hTerminateEvent;
 
+// Eventos de bloqueios 
 HANDLE hBlockLeituraEvent;
 HANDLE hBlockCapProcessoEvent;
 HANDLE hBlockCapOtimizacaoEvent;
 HANDLE hBlockExProcessoEvent;
 HANDLE hBlockExOtimizacaoEvent;
 
+// Evento de limpeza da janela de console de otimização
 HANDLE hClearConsoleEvent;
 
+// Handles para gerenciar lista circular em memória 
 CRITICAL_SECTION csListaCircularIO;
 HANDLE hNovosDadosProcessoEvent;
 HANDLE hNovosDadosOtimizacaoEvent;
 HANDLE hMemoryFullEvent;
 HANDLE hMemorySpaceEvent;
 
+// Handles para gerenciar comunicação entre processos
 HANDLE hMailSlotProcessoCreatedEvent;
 HANDLE hMailSlotOtimizacaoCreatedEvent;
 HANDLE hNovaMensagemProcesso;
 HANDLE hNovaMensagemOtimizacao;
 
+// Handles para gerenciar arquivo circular em disco
 HANDLE hArquivoMemoria;
 HANDLE hMutexArquivo;
 HANDLE hEspacoMemoriaArquivoEvent;
-#define MAX_MSG_FILE 50
-#define FILE_FULL 1
-const char HeaderInit[] = "00 00 00\n";
-const int HeaderSize = strlen(HeaderInit);
 
-// Globais
+// Instância da lista circular
 ListaCircular listaCircular;
+
+// --------------------------------------------------------------------------------------
+// --| Tarefa Principal |----------------------------------------------------------------
+// --------------------------------------------------------------------------------------
 
 int main()
 {
@@ -117,8 +105,6 @@ int main()
     HANDLE hThreadLeituraTeclado;
     HANDLE hThreadCapturaProcesso;
     HANDLE hThreadCapturaOtimizacao;
-
-    setlocale(LC_ALL, "Portuguese");
 
     hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
@@ -310,6 +296,10 @@ int main()
     exit(EXIT_SUCCESS);
 }
 
+// --------------------------------------------------------------------------------------
+// --| Tarefa de Leitura do Teclado |----------------------------------------------------
+// --------------------------------------------------------------------------------------
+
 void WINAPI ThreadLeituraTeclado(LPVOID tArgs) 
 {
 	cc_printf(CCWHITE, "[I] Thread Leitura do Teclado inicializada\n");
@@ -353,17 +343,13 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
     _endthreadex(0);
 }
 
+// --------------------------------------------------------------------------------------
+// --| Tarefa de Leitura de Dados |------------------------------------------------------
+// --------------------------------------------------------------------------------------
+
 int NSEQ_Processo = 1;
 int NSEQ_Otimizacao = 1;
 int NSEQ_Alarme = 1;
-
-void genDadosProcesso(char*);
-void genAlarme(char*);
-void genDadosOtimizacao(char*);
-
-void CALLBACK LerProcesso(PVOID, BOOLEAN);
-void CALLBACK LerOtimizacao(PVOID, BOOLEAN);
-void CALLBACK LerAlarme(PVOID, BOOLEAN);
 
 HANDLE hTimerQueue;
 HANDLE hTimerProcesso, hTimerOtimizacao, hTimerAlarme;
@@ -376,83 +362,15 @@ BOOL ProcessoRodando    = FALSE;
 BOOL OtimizacaoRodando  = FALSE;
 BOOL AlarmeRodando      = FALSE;
 
-void InitializeTimers(BOOL apenasAlarme = FALSE)
-{
-	BOOL status;
-
-    if (!ProcessoRodando && !apenasAlarme) 
-    {
-        ProcessoRodando = TRUE;
-		status = CreateTimerQueueTimer(&hTimerProcesso, hTimerQueue, (WAITORTIMERCALLBACK) LerProcesso,
-									   NULL, msPeriodProcesso, msPeriodProcesso, WT_EXECUTEDEFAULT);
-		if (!status){
-			cc_printf(CCRED, "[Leitura] Erro em TimerProcesso! Codigo = %d)\n", GetLastError());
-			exit(EXIT_FAILURE);
-		}
-    }
-
-    if (!OtimizacaoRodando && !apenasAlarme)
-    {
-        OtimizacaoRodando = TRUE;
-		status = CreateTimerQueueTimer(&hTimerOtimizacao, hTimerQueue, (WAITORTIMERCALLBACK) LerOtimizacao,
-									   NULL, msPeriodOtimizacao, msPeriodOtimizacao, WT_EXECUTEDEFAULT);
-		if (!status){
-			cc_printf(CCRED, "[Leitura] Erro em TimerOtimizacao! Codigo = %d)\n", GetLastError());
-			exit(EXIT_FAILURE);
-		}
-    }
-
-    if (!AlarmeRodando)
-    {
-        AlarmeRodando = TRUE;
-		status = CreateTimerQueueTimer(&hTimerAlarme, hTimerQueue, (WAITORTIMERCALLBACK) LerAlarme,
-									   NULL, msPeriodAlarme, msPeriodAlarme, WT_EXECUTEDEFAULT);
-		if (!status){
-			cc_printf(CCRED, "[Leitura] Erro em TimerAlarme! Codigo = %d)\n", GetLastError());
-			exit(EXIT_FAILURE);
-		}
-    }
-}
-void StopTimers(BOOL apenasDados = FALSE)
-{
-	BOOL status;
-
-    if (ProcessoRodando)
-    {
-        ProcessoRodando = FALSE;
-		status = DeleteTimerQueueTimer(hTimerQueue, hTimerProcesso, NULL); 
-		if (!status && GetLastError() != ERROR_IO_PENDING)
-        {
-			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerProcesso! Codigo = %d)\n", GetLastError());
-			exit(EXIT_FAILURE);
-		}
-    }
-
-    if (OtimizacaoRodando)
-    {
-        OtimizacaoRodando = FALSE;
-		status = DeleteTimerQueueTimer(hTimerQueue, hTimerOtimizacao, NULL); 
-		if (!status && GetLastError() != ERROR_IO_PENDING)
-        {
-			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerOtimizacao! Codigo = %d)\n", GetLastError());
-			exit(EXIT_FAILURE);
-		}
-    }
-
-    if (AlarmeRodando && !apenasDados)
-    {
-        AlarmeRodando = FALSE;
-		status = DeleteTimerQueueTimer(hTimerQueue, hTimerAlarme, NULL); 
-		if (!status && GetLastError() != ERROR_IO_PENDING)
-        {
-			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerAlarme! Codigo = %d)\n", GetLastError());
-			exit(EXIT_FAILURE);
-		}
-    }
-}
-
 HANDLE hMailSlotProcesso;
 HANDLE hMailSlotOtimizacao;
+
+void CALLBACK LerProcesso(PVOID, BOOLEAN);
+void CALLBACK LerOtimizacao(PVOID, BOOLEAN);
+void CALLBACK LerAlarme(PVOID, BOOLEAN);
+
+void InitializeTimers(BOOL apenasAlarme = FALSE);
+void StopTimers(BOOL apenasDados = FALSE);
 
 void WINAPI ThreadLeituraDados(LPVOID tArgs)
 {
@@ -545,7 +463,7 @@ void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
     int memoria_ret;
     char msg[MAX_MSG];
 
-	genDadosProcesso(msg);
+	genDadosProcesso(msg, NSEQ_Processo);
 
 	EnterCriticalSection(&csListaCircularIO);
 	memoria_ret = listaCircular.guardarDadoProcesso(msg);
@@ -570,7 +488,7 @@ void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
     int memoria_ret;
     char msg[MAX_MSG];
 
-	genDadosOtimizacao(msg);
+	genDadosOtimizacao(msg, NSEQ_Otimizacao);
 
 	EnterCriticalSection(&csListaCircularIO);
 	memoria_ret = listaCircular.guardarDadoOtimizacao(msg);
@@ -606,7 +524,8 @@ void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 
     char msg[MAX_MSG];
 
-	genAlarme(msg);
+	genAlarme(msg, NSEQ_Alarme);
+
 	//cc_printf(CCREDI, "[Leitura] %s\n", msg);
     WriteMailSlot(hMailSlotProcesso, msg);
     SetEvent(hNovaMensagemProcesso);
@@ -622,50 +541,84 @@ void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 	NSEQ_Alarme = 1 + (NSEQ_Alarme % 9999);
 }
 
-void genDadosProcesso(char* msg)
+void InitializeTimers(BOOL apenasAlarme)
 {
-    int TIPO = 55;
-    double T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO;
-    SYSTEMTIME TIMESTAMP;
+	BOOL status;
 
-	T_ZONA_P = RandReal(700, 900);
-	T_ZONA_A = RandReal(901, 1200);
-	T_ZONA_E = RandReal(1201, 1400);
-	PRESSAO  = RandReal(10, 12);
-	GetLocalTime(&TIMESTAMP);
+    if (!ProcessoRodando && !apenasAlarme) 
+    {
+        ProcessoRodando = TRUE;
+		status = CreateTimerQueueTimer(&hTimerProcesso, hTimerQueue, (WAITORTIMERCALLBACK) LerProcesso,
+									   NULL, msPeriodProcesso, msPeriodProcesso, WT_EXECUTEDEFAULT);
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro em TimerProcesso! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+    }
 
-	sprintf_s(msg, MAX_MSG, "%04d$%02d$%06.1f$%06.1f$%06.1f$%04.1f$%02d:%02d:%02d", 
-		NSEQ_Processo, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E, PRESSAO,
-		TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
+    if (!OtimizacaoRodando && !apenasAlarme)
+    {
+        OtimizacaoRodando = TRUE;
+		status = CreateTimerQueueTimer(&hTimerOtimizacao, hTimerQueue, (WAITORTIMERCALLBACK) LerOtimizacao,
+									   NULL, msPeriodOtimizacao, msPeriodOtimizacao, WT_EXECUTEDEFAULT);
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro em TimerOtimizacao! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+    }
+
+    if (!AlarmeRodando)
+    {
+        AlarmeRodando = TRUE;
+		status = CreateTimerQueueTimer(&hTimerAlarme, hTimerQueue, (WAITORTIMERCALLBACK) LerAlarme,
+									   NULL, msPeriodAlarme, msPeriodAlarme, WT_EXECUTEDEFAULT);
+		if (!status){
+			cc_printf(CCRED, "[Leitura] Erro em TimerAlarme! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+    }
 }
-void genDadosOtimizacao(char* msg) 
+void StopTimers(BOOL apenasDados)
 {
-    int TIPO = 01;
-    double T_ZONA_P, T_ZONA_A, T_ZONA_E;
-    SYSTEMTIME TIMESTAMP;
+	BOOL status;
 
-	T_ZONA_P = RandReal(700, 900);
-	T_ZONA_A = RandReal(901, 1200);
-	T_ZONA_E = RandReal(1201, 1400);
-	GetLocalTime(&TIMESTAMP);
+    if (ProcessoRodando)
+    {
+        ProcessoRodando = FALSE;
+		status = DeleteTimerQueueTimer(hTimerQueue, hTimerProcesso, NULL); 
+		if (!status && GetLastError() != ERROR_IO_PENDING)
+        {
+			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerProcesso! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+    }
 
-	sprintf_s(msg, MAX_MSG, "%04d$%02d$%06.1f$%06.1f$%06.1f$%02d:%02d:%02d", 
-		NSEQ_Otimizacao, TIPO, T_ZONA_P, T_ZONA_A, T_ZONA_E,
-		TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
+    if (OtimizacaoRodando)
+    {
+        OtimizacaoRodando = FALSE;
+		status = DeleteTimerQueueTimer(hTimerQueue, hTimerOtimizacao, NULL); 
+		if (!status && GetLastError() != ERROR_IO_PENDING)
+        {
+			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerOtimizacao! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+    }
+
+    if (AlarmeRodando && !apenasDados)
+    {
+        AlarmeRodando = FALSE;
+		status = DeleteTimerQueueTimer(hTimerQueue, hTimerAlarme, NULL); 
+		if (!status && GetLastError() != ERROR_IO_PENDING)
+        {
+			cc_printf(CCRED, "[Leitura] Erro ao deletar TimerAlarme! Codigo = %d)\n", GetLastError());
+			exit(EXIT_FAILURE);
+		}
+    }
 }
-void genAlarme(char* msg)
-{
-    int TIPO = 99;
-    int CODIGO;
-    SYSTEMTIME TIMESTAMP;
 
-    CODIGO = round(RandReal(0, 99));
-	GetLocalTime(&TIMESTAMP);
-
-	sprintf_s(msg, MAX_MSG, "%04d$%02d$%02d$%02d:%02d:%02d", 
-		NSEQ_Alarme, TIPO, CODIGO,
-		TIMESTAMP.wHour, TIMESTAMP.wMinute, TIMESTAMP.wSecond);
-}
+// --------------------------------------------------------------------------------------
+// --| Tarefa de Captura de dados de Otimizacao |----------------------------------------
+// --------------------------------------------------------------------------------------
 
 void WINAPI ThreadCapturaProcesso(LPVOID)
 {
@@ -724,84 +677,12 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
     _endthreadex(0);
 }
 
-BOOL temEspacoArquivoMemoria()
-{
-    char buffer[MAX_MSG];
+// --------------------------------------------------------------------------------------
+// --| Tarefa de Captura de dados do Processo |------------------------------------------
+// --------------------------------------------------------------------------------------
 
-    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
-    if (FALSE == ReadFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
-    {
-		cc_printf(CCRED, "Erro ao ler cabecalho do arquivo\n");
-    }
-    buffer[HeaderSize] = '\0';
-
-	std::istringstream iss(buffer);
-	std::string token;
-    int initLine, lastLine, numMsg;
-
-    std::getline(iss, token, ' ');
-    initLine = stoi(token);
-
-    std::getline(iss, token, ' ');
-    lastLine = stoi(token);
-
-    std::getline(iss, token, ' ');
-    numMsg = stoi(token);
-
-    if (numMsg >= MAX_MSG_FILE)
-    {
-        return FALSE;
-    }
-    return TRUE;
-}
-int WriteArquivoMemoria(char *msg)
-{
-    char buffer[MAX_MSG];
-
-    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
-    if (FALSE == ReadFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
-    {
-		cc_printf(CCRED, "Erro ao ler cabecalho do arquivo\n");
-    }
-    buffer[HeaderSize] = '\0';
-
-	std::istringstream iss(buffer);
-	std::string token;
-    int initLine, lastLine, numMsg;
-
-    std::getline(iss, token, ' ');
-    initLine = stoi(token);
-
-    std::getline(iss, token, ' ');
-    lastLine = stoi(token);
-
-    std::getline(iss, token, ' ');
-    numMsg = stoi(token);
-
-    if (numMsg >= MAX_MSG_FILE)
-    {
-        return FILE_FULL;
-    }
-
-	std::string LineMsg = std::string(msg) + '\n';
-	SetFilePointer(hArquivoMemoria, HeaderSize + lastLine * LineMsg.length(), 0, FILE_BEGIN);
-	if (FALSE == WriteFile(hArquivoMemoria, LineMsg.c_str(), LineMsg.length(), 0, NULL))
-	{
-		cc_printf(CCRED, "Erro ao escrever otimizacao no arquivo\n");
-	}
-
-    lastLine = (lastLine + 1) % MAX_MSG_FILE; 
-    numMsg++;
-    sprintf_s(buffer, HeaderSize+1, "%02d %02d %02d\n", initLine, lastLine, numMsg);
-
-    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
-    if (FALSE == WriteFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
-    {
-		cc_printf(CCRED, "Erro ao escrever no cabecalho do arquivo\n");
-    }
-
-    return 0;
-}
+BOOL temEspacoArquivoMemoria();
+int EscreverArquivoMemoria(char*);
 
 void WINAPI ThreadCapturaOtimizacao(LPVOID)
 {
@@ -849,7 +730,7 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 
 					//cc_printf(CCBLUE, "[Otimizacao] %s\n", msg);
                     WaitForSingleObject(hMutexArquivo, INFINITE);
-					WriteArquivoMemoria(msg);
+					EscreverArquivoMemoria(msg);
                     ReleaseMutex(hMutexArquivo);
 
 					ResetEvent(hNovosDadosOtimizacaoEvent);
@@ -872,5 +753,84 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 
     cc_printf(CCRED, "[S] Saindo da thread Captura de Dados de Otimizacao\n");
     _endthreadex(0);
+}
+
+BOOL temEspacoArquivoMemoria()
+{
+    char buffer[MAX_MSG];
+
+    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
+    if (FALSE == ReadFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
+    {
+		cc_printf(CCRED, "Erro ao ler cabecalho do arquivo\n");
+    }
+    buffer[HeaderSize] = '\0';
+
+	std::istringstream iss(buffer);
+	std::string token;
+    int initLine, lastLine, numMsg;
+
+    std::getline(iss, token, ' ');
+    initLine = stoi(token);
+
+    std::getline(iss, token, ' ');
+    lastLine = stoi(token);
+
+    std::getline(iss, token, ' ');
+    numMsg = stoi(token);
+
+    if (numMsg >= MAX_MSG_FILE)
+    {
+        return FALSE;
+    }
+    return TRUE;
+}
+int EscreverArquivoMemoria(char *msg)
+{
+    char buffer[MAX_MSG];
+
+    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
+    if (FALSE == ReadFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
+    {
+		cc_printf(CCRED, "Erro ao ler cabecalho do arquivo\n");
+    }
+    buffer[HeaderSize] = '\0';
+
+	std::istringstream iss(buffer);
+	std::string token;
+    int initLine, lastLine, numMsg;
+
+    std::getline(iss, token, ' ');
+    initLine = stoi(token);
+
+    std::getline(iss, token, ' ');
+    lastLine = stoi(token);
+
+    std::getline(iss, token, ' ');
+    numMsg = stoi(token);
+
+    if (numMsg >= MAX_MSG_FILE)
+    {
+        return FILE_FULL;
+    }
+
+	std::string LineMsg = std::string(msg) + '\n';
+	SetFilePointer(hArquivoMemoria, HeaderSize + lastLine * LineMsg.length(), 0, FILE_BEGIN);
+	if (FALSE == WriteFile(hArquivoMemoria, LineMsg.c_str(), LineMsg.length(), 0, NULL))
+	{
+		cc_printf(CCRED, "Erro ao escrever otimizacao no arquivo\n");
+	}
+
+    lastLine = (lastLine + 1) % MAX_MSG_FILE; 
+    numMsg++;
+    sprintf_s(buffer, HeaderSize+1, "%02d %02d %02d\n", initLine, lastLine, numMsg);
+
+    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
+    if (FALSE == WriteFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
+    {
+		cc_printf(CCRED, "Erro ao escrever no cabecalho do arquivo\n");
+    }
+
+    return 0;
 }
 

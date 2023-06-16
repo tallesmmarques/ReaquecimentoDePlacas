@@ -7,8 +7,6 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <process.h>
-#include <math.h>
-#include <locale.h>
 #include "Mensagem.h"
 
 // Constantes

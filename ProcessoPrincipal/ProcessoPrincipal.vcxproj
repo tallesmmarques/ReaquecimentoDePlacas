@@ -130,6 +130,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Common.cpp" />
     <ClCompile Include="ListaCircular.cpp" />
     <ClCompile Include="ProcessoPrincipal.cpp" />
   </ItemGroup>
@@ -138,6 +139,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CheckForError.h" />
+    <ClInclude Include="Common.h" />
     <ClInclude Include="ListaCircular.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
