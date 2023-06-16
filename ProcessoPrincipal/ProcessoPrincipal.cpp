@@ -803,6 +803,7 @@ BOOL temEspacoArquivoCircular()
 {
     char buffer[SIZE_MSG];
 
+    // leitura do cabeçalho
     SetFilePointer(hArquivoCircular, 0, 0, FILE_BEGIN);
     if (FALSE == ReadFile(hArquivoCircular, buffer, HeaderSize, 0, NULL))
     {
@@ -833,6 +834,7 @@ int EscreverArquivoCircular(char *msg)
 {
     char buffer[SIZE_MSG];
 
+    // leitura do cabeçalho
     SetFilePointer(hArquivoCircular, 0, 0, FILE_BEGIN);
     if (FALSE == ReadFile(hArquivoCircular, buffer, HeaderSize, 0, NULL))
     {
@@ -858,6 +860,7 @@ int EscreverArquivoCircular(char *msg)
         return FILE_FULL;
     }
 
+    // escrita dos dados
 	std::string LineMsg = std::string(msg) + '\n';
 	SetFilePointer(hArquivoCircular, HeaderSize + lastLine * LineMsg.length(), 0, FILE_BEGIN);
 	if (FALSE == WriteFile(hArquivoCircular, LineMsg.c_str(), LineMsg.length(), 0, NULL))
@@ -865,6 +868,7 @@ int EscreverArquivoCircular(char *msg)
 		cc_printf(CCRED, "Erro ao escrever otimizacao no arquivo\n");
 	}
 
+    // atualização do cabeçalho
     lastLine = (lastLine + 1) % MAX_MSG_FILE; 
     numMsg++;
     sprintf_s(buffer, HeaderSize+1, "%02d %02d %02d\n", initLine, lastLine, numMsg);

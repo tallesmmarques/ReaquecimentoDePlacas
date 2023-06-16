@@ -7,21 +7,20 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <process.h>
-#include <math.h>
 #include "Mensagem.h"
 
-// Constantes
-#define ESC 27
-#define SIZE_MSG 50
+/// Constantes
+#define ESC 27                          // valor da tecla ESC
+#define SIZE_MSG 50                     // número máximo de caractéres nas mensagens
 
-// Utilitários
-#define _CHECKERROR    1        // Ativa função CheckForError
+/// Utilitários
+#define _CHECKERROR    1                // Ativa função CheckForError
 #include "CheckForError.h"
 
 typedef unsigned (WINAPI* CAST_FUNCTION)(LPVOID);
 typedef unsigned* CAST_LPDWORD;
 
-// Cores e ferramentas para Console
+/// Cores e ferramentas para Console
 #define CCRED       FOREGROUND_RED
 #define CCREDI      FOREGROUND_RED   | FOREGROUND_INTENSITY
 #define CCBLUE      FOREGROUND_BLUE  | FOREGROUND_INTENSITY
@@ -29,11 +28,9 @@ typedef unsigned* CAST_LPDWORD;
 #define CCWHITE     FOREGROUND_RED   | FOREGROUND_GREEN     | FOREGROUND_BLUE
 #define CCPURPLE    FOREGROUND_RED   | FOREGROUND_BLUE      | FOREGROUND_INTENSITY
 HANDLE hOut;
-CRITICAL_SECTION csConsole;
+CRITICAL_SECTION csConsole;             // seção crítica para escrever no terminal
 
-// Funções, Threads e Eventos
-
-// printf colorido, e com exclusão mútua
+/// printf colorido, e com exclusão mútua
 void cc_printf(const int color, const char* format, ...)
 {
 	char buf[512];
@@ -48,46 +45,21 @@ void cc_printf(const int color, const char* format, ...)
 	LeaveCriticalSection(&csConsole);
 }
 
-#define NO_MESSAGE 1
-#define ERROR_MAILSLOT_INFO 2
-#define ERROR_MAILSLOT_READ 3
-int ReadMailSlot(HANDLE hSlot, char* msg, int* msgRestantes)
-{
-    BOOL status;
-    DWORD tamanhoProximaMensagem, numMensagens;
-    DWORD cAllMessages;
-    OVERLAPPED ov;
-    TCHAR buffer[SIZE_MSG];
-
-    tamanhoProximaMensagem = numMensagens = 0;
-
-    status = GetMailslotInfo(hSlot, NULL, &tamanhoProximaMensagem, &numMensagens, NULL);
-    if (!status)
-    {
-        cc_printf(CCRED, "Erro ao obter informacoes do mailslot, codigo = %d\n", GetLastError());
-        return ERROR_MAILSLOT_INFO;
-    }
-
-    if (tamanhoProximaMensagem == MAILSLOT_NO_MESSAGE)
-        return NO_MESSAGE;
-
-    status = ReadFile(hSlot, msg, tamanhoProximaMensagem, 0, NULL);
-    if (!status)
-    {
-        cc_printf(CCRED, "Erro ao ler mensagem na mailslot, codigo = %d\n", GetLastError());
-        return ERROR_MAILSLOT_READ;
-    }
-
-    *msgRestantes = numMensagens - 1;
-
-    return 0;
-}
-
+/// Evento que sinaliza o termino de toda a aplicação
 HANDLE hTerminateEvent;
-HANDLE hBlockExProcessoEvent;
-HANDLE hMailSlotProcessoCriadoEvent;
-HANDLE hMailSlot;
-HANDLE hNovaMensagemProcesso;
+
+/// Evento de bloqueio
+HANDLE hBlockExProcessoEvent;           // bloqueia tarefa de exibição de dados de processos
+
+/// Handles para mailslot
+HANDLE hMailSlotProcessoCriadoEvent;    // mail slot foi criado pelo processo de exibição de processo
+HANDLE hMailSlot;                       // handle do mailslot
+HANDLE hNovaMensagemProcesso;           // nova mensagem escrita no mailslot
+
+#define NO_MESSAGE 1                    // erro quando não há mensagem para ser lida no arquivo circular
+#define ERROR_MAILSLOT_INFO 2           // erro ao obter informações do mailslot
+#define ERROR_MAILSLOT_READ 3           // erro ao ler mailslot
+int ReadMailSlot(char*, int*);          // função para ler mensagens no mailslot
 
 int main()
 {
@@ -142,7 +114,7 @@ int main()
         if (numEvent == 2) // nova mensagem
         {
             do {
-                status = ReadMailSlot(hMailSlot, msg, &msgRestantes);
+                status = ReadMailSlot(msg, &msgRestantes);
                 if (status == ERROR_MAILSLOT_INFO || status == ERROR_MAILSLOT_READ)
                     SetEvent(hTerminateEvent);
                 if (status == NO_MESSAGE) break;
@@ -170,3 +142,33 @@ int main()
     exit(EXIT_SUCCESS);
 }
 
+int ReadMailSlot(char* msg, int* msgRestantes)
+{
+    BOOL status;
+    DWORD tamanhoProximaMensagem, numMensagens;
+    DWORD cAllMessages;
+    OVERLAPPED ov;
+    TCHAR buffer[SIZE_MSG];
+
+    tamanhoProximaMensagem = numMensagens = 0;
+
+    status = GetMailslotInfo(hMailSlot, NULL, &tamanhoProximaMensagem, &numMensagens, NULL);
+    if (!status)
+    {
+        cc_printf(CCRED, "Erro ao obter informacoes do mailslot, codigo = %d\n", GetLastError());
+        return ERROR_MAILSLOT_INFO;
+    }
+
+    if (tamanhoProximaMensagem == MAILSLOT_NO_MESSAGE)
+        return NO_MESSAGE;
+
+    status = ReadFile(hMailSlot, msg, tamanhoProximaMensagem, 0, NULL);
+    if (!status)
+    {
+        cc_printf(CCRED, "Erro ao ler mensagem na mailslot, codigo = %d\n", GetLastError());
+        return ERROR_MAILSLOT_READ;
+    }
+
+    *msgRestantes = numMensagens - 1;
+    return 0;
+}
