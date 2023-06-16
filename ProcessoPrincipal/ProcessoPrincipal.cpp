@@ -352,7 +352,6 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
     WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
 
     cc_printf(CCRED, "[S] Saindo da thread Leitura do Teclado\n");
-
     _endthreadex(0);
 }
 
@@ -397,9 +396,9 @@ void WINAPI ThreadAuxiliarLeituraTeclado(LPVOID tArgs)
 // --| Tarefa de Leitura de Dados |------------------------------------------------------
 // --------------------------------------------------------------------------------------
 
-int NSEQ_Processo = 1;
+int NSEQ_Processo   = 1;
 int NSEQ_Otimizacao = 1;
-int NSEQ_Alarme = 1;
+int NSEQ_Alarme     = 1;
 
 HANDLE hTimerQueue;
 HANDLE hTimerProcesso, hTimerOtimizacao, hTimerAlarme;
@@ -413,7 +412,6 @@ BOOL OtimizacaoRodando  = FALSE;
 BOOL AlarmeRodando      = FALSE;
 
 HANDLE hMailSlotProcesso;
-HANDLE hMailSlotOtimizacao;
 
 void CALLBACK LerProcesso(PVOID, BOOLEAN);
 void CALLBACK LerOtimizacao(PVOID, BOOLEAN);
@@ -449,7 +447,7 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
 		hTimerQueue = CreateTimerQueue();
 		if (hTimerQueue == NULL) {
-			cc_printf(CCRED, "[Leitura] Falha em CreateTimerQueue! Codigo =%d)\n", GetLastError());
+			cc_printf(CCRED, "[Leitura] Falha em CreateTimerQueue! Codigo = %d)\n", GetLastError());
 			exit(EXIT_FAILURE);
 		}
 		InitializeTimers();
@@ -567,11 +565,7 @@ void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 }
 void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
-    HANDLE hEvents[2] = { hBlockLeituraEvent, hTerminateEvent };
-    DWORD dwRet;
-    DWORD numEvent;
     BOOL status;
-
     char msg[SIZE_MSG];
 
 	genAlarme(msg, NSEQ_Alarme);
@@ -691,7 +685,7 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
             dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
             numEvent = dwRet - WAIT_OBJECT_0;
 
-            if (numEvent == 2)
+            if (numEvent == 2) // novo dado na memoria circular
             {
                 ResetEvent(hNovosDadosProcessoEvent);
                 do {
@@ -706,7 +700,7 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
                     PulseEvent(hNovoEspacoMemoriaCircularEvent);
                 } while (ret != MEMORY_EMPTY);
             }
-            else if (numEvent == 0)
+            else if (numEvent == 0) // bloqueio da tarefa pelo usuário
             {
                 ResetEvent(hBlockCapProcessoEvent);
 
@@ -720,7 +714,7 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
                     SetEvent(hNovosDadosProcessoEvent);
                 }
             }
-        } while (numEvent != 1);
+        } while (numEvent != 1); // ESC 
     }
 
     cc_printf(CCRED, "[S] Saindo da thread Captura de Dados de Processo\n");
@@ -750,9 +744,9 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 		dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
 		numEvent = dwRet - WAIT_OBJECT_0;
 
-        if (numEvent == 1) break;
+        if (numEvent == 1) break; // ESC
 
-		else if (numEvent == 0)
+		else if (numEvent == 0) // bloqueio pelo usuário
 		{
 			ResetEvent(hBlockCapOtimizacaoEvent);
 
@@ -767,7 +761,7 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 			}
 		}
 
-		else if (numEvent == 2)
+		else if (numEvent == 2) // novo dado na memória circular
 		{
 			ret = MEMORY_EMPTY;
 			do {
@@ -799,7 +793,7 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 				PulseEvent(hNovoEspacoMemoriaCircularEvent);
 			} while (ret != MEMORY_EMPTY);
 		}
-	} while (numEvent != 1);
+	} while (numEvent != 1); // ESC
 
     cc_printf(CCRED, "[S] Saindo da thread Captura de Dados de Otimizacao\n");
     _endthreadex(0);
