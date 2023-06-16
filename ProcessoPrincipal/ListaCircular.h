@@ -14,16 +14,16 @@
 class ListaCircular
 {
 private:
-	std::string* memoria_processo;
-	std::string* memoria_otimizacao;
+	std::string* memoriaProcesso;
+	std::string* memoriaOtimizacao;
 
 	int numDadosProcesso = 0;
-	int primeiro_processo = 0;
-	int ultimo_processo = 0;
+	int primeiroProcesso = 0;
+	int ultimoProcesso = 0;
 
 	int numDadosOtimizacao = 0;
-	int primeiro_otimizacao = 0;
-	int ultimo_otimizacao = 0;
+	int primeiroOtimizacao = 0;
+	int ultimoOtimizacao = 0;
 
 public:
 	ListaCircular();

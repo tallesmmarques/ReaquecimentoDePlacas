@@ -63,7 +63,7 @@ BOOL WriteMailSlot(HANDLE hSlot, char* msg)
 
 	if (!status) 
 	{ 
-	  printf(ANSI_COLOR_RED "Erro ao escrever no mailslot de processos, codigo %d" ANSI_COLOR_RESET "\n", 
+	  printf(ANSI_COLOR_RED "Erro ao escrever no mailslot, codigo %d" ANSI_COLOR_RESET "\n", 
 		  GetLastError()); 
 	  return FALSE; 
 	} 
