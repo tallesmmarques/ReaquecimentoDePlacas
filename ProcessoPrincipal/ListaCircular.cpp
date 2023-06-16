@@ -29,7 +29,7 @@ int ListaCircular::lerDadoProcesso(char* msg)
 	if (numDadosProcesso == 0)
 		return MEMORY_EMPTY;
 
-	strcpy_s(msg, MAX_MSG, memoria_processo[primeiro_processo].c_str());
+	strcpy_s(msg, SIZE_MSG, memoria_processo[primeiro_processo].c_str());
 	primeiro_processo = (primeiro_processo + 1) % MAX_DADOS;
 
 	numDadosProcesso--;
@@ -52,7 +52,7 @@ int ListaCircular::lerDadoOtimizacao(char* msg)
 	if (numDadosOtimizacao == 0)
 		return MEMORY_EMPTY;
 
-	strcpy_s(msg, MAX_MSG, memoria_otimizacao[primeiro_otimizacao].c_str());
+	strcpy_s(msg, SIZE_MSG, memoria_otimizacao[primeiro_otimizacao].c_str());
 	primeiro_otimizacao = (primeiro_otimizacao + 1) % MAX_DADOS;
 
 	numDadosOtimizacao--;

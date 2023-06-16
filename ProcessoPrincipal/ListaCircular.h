@@ -7,8 +7,8 @@
 #define MEMORY_FULL 1
 #define MEMORY_EMPTY 2
 
-#ifndef MAX_MSG
-#define MAX_MSG 50
+#ifndef SIZE_MSG
+#define SIZE_MSG 50
 #endif
 
 class ListaCircular

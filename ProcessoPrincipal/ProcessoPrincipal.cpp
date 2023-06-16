@@ -15,22 +15,22 @@
 #include "ListaCircular.h"
 #include "Common.h"
 
-// Constantes
-#define ESC 27
-#define MAX_MSG 50
-#define MAX_MSG_FILE 50
-#define FILE_FULL 1
-const char HeaderInit[] = "00 00 00\n";
-const int HeaderSize = strlen(HeaderInit);
+/// Constantes
+#define ESC 27                          // valor da tecla ESC
+#define SIZE_MSG 50                     // número máximo de caractéres nas mensagens
+#define MAX_MSG_FILE 50                 // numero máximo de mensagens no arquivo circular
+#define FILE_FULL 1                     // erro quando o arquivo circular esta cheio
+const char HeaderInit[] = "00 00 00\n"; // cabeçalho do arquivo circular
+const int HeaderSize = strlen(HeaderInit);  // tamanho do cabeçalho do arquivo circular
 
-// Utilitários
-#define _CHECKERROR    1        // Ativa função CheckForError
+/// Utilitários
+#define _CHECKERROR    1                // Ativa função CheckForError
 #include "CheckForError.h"
 
 typedef unsigned (WINAPI* CAST_FUNCTION)(LPVOID);
 typedef unsigned* CAST_LPDWORD;
 
-// Cores e ferramentas para Console
+/// Cores e ferramentas para Console
 #define CCRED       FOREGROUND_RED
 #define CCREDI      FOREGROUND_RED   | FOREGROUND_INTENSITY
 #define CCBLUE      FOREGROUND_BLUE  | FOREGROUND_INTENSITY
@@ -38,9 +38,9 @@ typedef unsigned* CAST_LPDWORD;
 #define CCWHITE     FOREGROUND_RED   | FOREGROUND_GREEN     | FOREGROUND_BLUE
 #define CCPURPLE    FOREGROUND_RED   | FOREGROUND_BLUE      | FOREGROUND_INTENSITY
 HANDLE hOut;
-CRITICAL_SECTION csConsole;
+CRITICAL_SECTION csConsole;             // seção crítica para escrever no terminal
 
-// printf colorido e com exclusão mútua
+/// printf colorido e com exclusão mútua
 void cc_printf(const int color, const char* format, ...)
 {
 	char buf[512];
@@ -55,45 +55,45 @@ void cc_printf(const int color, const char* format, ...)
 	LeaveCriticalSection(&csConsole);
 }
 
-// Threads
+/// Threads
 void WINAPI ThreadLeituraTeclado(LPVOID);
 void WINAPI ThreadLeituraDados(LPVOID);
 void WINAPI ThreadCapturaProcesso(LPVOID);
 void WINAPI ThreadCapturaOtimizacao(LPVOID);
 
-// Evento que sinaliza o termino de toda a aplicação
+/// Evento que sinaliza o termino de toda a aplicação
 HANDLE hTerminateEvent;
 
-// Eventos de bloqueios 
-HANDLE hBlockLeituraEvent;
-HANDLE hBlockCapProcessoEvent;
-HANDLE hBlockCapOtimizacaoEvent;
-HANDLE hBlockExProcessoEvent;
-HANDLE hBlockExOtimizacaoEvent;
+/// Eventos de bloqueios 
+HANDLE hBlockLeituraEvent;              // bloqueia tarefa de leitura de dados
+HANDLE hBlockCapProcessoEvent;          // bloqueia tarefa de captura de dados de processos
+HANDLE hBlockCapOtimizacaoEvent;        // bloqueia tarefa de captura de dados de otimizacao
+HANDLE hBlockExProcessoEvent;           // bloqueia tarefa de exibição de dados de processos
+HANDLE hBlockExOtimizacaoEvent;         // bloqueia tarefa de exibição de dados de otimização
 
-// Evento de limpeza da janela de console de otimização
-HANDLE hClearConsoleEvent;
+/// Evento de limpeza da janela de console de otimização
+HANDLE hClearConsoleEvent;              // limpa console de otimização quando pressionado 'x'
 
-// Handles para gerenciar lista circular em memória 
-CRITICAL_SECTION csListaCircularIO;
-HANDLE hNovosDadosProcessoEvent;
-HANDLE hNovosDadosOtimizacaoEvent;
-HANDLE hMemoryFullEvent;
-HANDLE hMemorySpaceEvent;
+/// Handles para gerenciar lista circular em memória 
+CRITICAL_SECTION csListaCircularIO;     // seção crítica para gravar ou ler a memoria circular
+HANDLE hNovosDadosProcessoEvent;        // um novo dado de processo foi salvo na memoria circular
+HANDLE hNovosDadosOtimizacaoEvent;      // um novo dado de otimizacao foi salvo na memoria circular
+HANDLE hMemoriaCircularCheiaEvent;      // a memoria circular esta cheia
+HANDLE hNovoEspacoMemoriaCircularEvent; // foi liberado espaço na memoria circular
+HANDLE hNovaMensagemProcesso;           // nova mensagem escrita no mailslot de processos
 
-// Handles para gerenciar comunicação entre processos
-HANDLE hMailSlotProcessoCreatedEvent;
-HANDLE hMailSlotOtimizacaoCreatedEvent;
-HANDLE hNovaMensagemProcesso;
-HANDLE hNovaMensagemOtimizacao;
+/// Handles para gerenciar comunicação entre processos
+HANDLE hMailSlotProcessoCriadoEvent;    // mail slot foi criado pelo processo de exibição de processo
 
-// Handles para gerenciar arquivo circular em disco
-HANDLE hArquivoMemoria;
-HANDLE hMutexArquivo;
-HANDLE hEspacoMemoriaArquivoEvent;
+/// Handles para gerenciar arquivo circular em disco
+HANDLE hArquivoCircular;                // handle para arquivo
+HANDLE hMutexArquivo;                   // mutex para exclusão mutua entre operações no arquivo
+HANDLE hNovoEspacoArquivoCircularEvent; // foi liberado espaço no arquivo circular
+HANDLE hNovaMensagemOtimizacao;         // nova mensagem escrita no arquivo circular 
 
-// Instância da lista circular
-ListaCircular listaCircular;
+/// Instância da lista circular
+ListaCircular listaCircular;            // objeto da classe ListaCircular usado para 
+                                        // armazenar alarmes e dados de processos
 
 // --------------------------------------------------------------------------------------
 // --| Tarefa Principal |----------------------------------------------------------------
@@ -101,20 +101,22 @@ ListaCircular listaCircular;
 
 int main()
 {
+    // handles para threads
     HANDLE hThreadLeituraDados;
     HANDLE hThreadLeituraTeclado;
     HANDLE hThreadCapturaProcesso;
     HANDLE hThreadCapturaOtimizacao;
 
+    // ferramentas para console
     hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     if (hOut == INVALID_HANDLE_VALUE) {
         printf("Erro ao obter handle para escrita no console\n");
         exit(EXIT_FAILURE);
     }
-
     InitializeCriticalSection(&csConsole);
     InitializeCriticalSection(&csListaCircularIO);
 
+    // handles para threads
     hTerminateEvent = CreateEvent(NULL, TRUE, FALSE, "TerminateEvent");
     CheckForError(hTerminateEvent);
     hBlockLeituraEvent = CreateEvent(NULL, TRUE, FALSE, "BlockLeituraEvent");
@@ -128,43 +130,45 @@ int main()
     hBlockExOtimizacaoEvent = CreateEvent(NULL, TRUE, FALSE, "BlockExOtimizacaoEvent");
     CheckForError(hBlockExOtimizacaoEvent);
 
-    hMemoryFullEvent = CreateEvent(NULL, TRUE, FALSE, "MemoryFullEvent");
-    CheckForError(hMemoryFullEvent);
-    hMemorySpaceEvent = CreateEvent(NULL, FALSE, FALSE, "MemorySpaceEvent");
-    CheckForError(hMemorySpaceEvent);
+    // handles para memoria circular
+    hMemoriaCircularCheiaEvent = CreateEvent(NULL, TRUE, FALSE, "MemoriaCircularCheia");
+    CheckForError(hMemoriaCircularCheiaEvent);
+    hNovoEspacoMemoriaCircularEvent = CreateEvent(NULL, FALSE, FALSE, "NovoEspacoMemoriaCircularEvent");
+    CheckForError(hNovoEspacoMemoriaCircularEvent);
     hNovosDadosProcessoEvent = CreateEvent(NULL, TRUE, FALSE, "NovosDadosProcessoEvent");
     CheckForError(hNovosDadosProcessoEvent);
     hNovosDadosOtimizacaoEvent = CreateEvent(NULL, TRUE, FALSE, "NovosDadosOtimizacaoEvent");
     CheckForError(hNovosDadosOtimizacaoEvent);
 
+    // handle de limpeza do console de otimização
     hClearConsoleEvent = CreateEvent(NULL, TRUE, FALSE, "ClearConsoleEvent");
     CheckForError(hClearConsoleEvent);
 
-    hMailSlotProcessoCreatedEvent = CreateEvent(NULL, TRUE, FALSE, "MailSlotProcessoCreatedEvent");
-    CheckForError(hMailSlotProcessoCreatedEvent);
-    hMailSlotOtimizacaoCreatedEvent = CreateEvent(NULL, TRUE, FALSE, "MailSlotOtimizacaoCreatedEvent");
-    CheckForError(hMailSlotOtimizacaoCreatedEvent);
+    // handles para comunicação entre processos
+    hMailSlotProcessoCriadoEvent = CreateEvent(NULL, TRUE, FALSE, "MailSlotProcessoCriadoEvent");
+    CheckForError(hMailSlotProcessoCriadoEvent);
     hNovaMensagemProcesso = CreateEvent(NULL, TRUE, FALSE, "NovaMensagemProcesso");
     CheckForError(hNovaMensagemProcesso);
-    hNovaMensagemOtimizacao = CreateEvent(NULL, TRUE, FALSE, "NovaMensagemOtimizacao");
-    CheckForError(hNovaMensagemOtimizacao);
 
+    // handles para arquivo circular
     hMutexArquivo = CreateMutex(NULL, FALSE, "MutexArquivo");
     CheckForError(hMutexArquivo);
-    hEspacoMemoriaArquivoEvent = CreateEvent(NULL, FALSE, FALSE, "EspacoMemoriaArquivoEvent");
-    CheckForError(hEspacoMemoriaArquivoEvent);
-
-    hArquivoMemoria = CreateFile("otimizacao.data",
+    hNovoEspacoArquivoCircularEvent = CreateEvent(NULL, FALSE, FALSE, "NovoEspacoArquivoCircularEvent");
+    CheckForError(hNovoEspacoArquivoCircularEvent);
+    hNovaMensagemOtimizacao = CreateEvent(NULL, TRUE, FALSE, "NovaMensagemOtimizacao");
+    CheckForError(hNovaMensagemOtimizacao);
+    // ---
+    hArquivoCircular = CreateFile("otimizacao.data",
         GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
         CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-    CheckForError(hArquivoMemoria != INVALID_HANDLE_VALUE);
-    WriteFile(hArquivoMemoria, HeaderInit, HeaderSize, 0, NULL);
+    CheckForError(hArquivoCircular != INVALID_HANDLE_VALUE);
+    WriteFile(hArquivoCircular, HeaderInit, HeaderSize, 0, NULL);
 
     DWORD status;
 
+    // criação do processo de exibição de dados de processos
 	STARTUPINFO siExP;
     PROCESS_INFORMATION piExP;
-
     ZeroMemory(&siExP, sizeof(siExP));
     siExP.cb = sizeof(siExP);
     ZeroMemory(&piExP, sizeof(piExP));
@@ -181,9 +185,9 @@ int main()
         &piExP
     );
 
+    // criação do processo de exibição de dados de otimização
 	STARTUPINFO siExO;
     PROCESS_INFORMATION piExO;
-
     ZeroMemory(&siExO, sizeof(siExO));
     siExO.cb = sizeof(siExO);
     ZeroMemory(&piExO, sizeof(piExO));
@@ -200,6 +204,7 @@ int main()
         &piExO
     );
 
+    // criação da thread de leitura de dados
     hThreadLeituraDados = (HANDLE)_beginthreadex(
         NULL,
         0,
@@ -215,6 +220,7 @@ int main()
         exit(0);
     }
 
+    // criação da thread de leitura do teclado
     hThreadLeituraTeclado = (HANDLE)_beginthreadex(
         NULL,
         0,
@@ -230,6 +236,7 @@ int main()
         exit(0);
     }
 
+    // criação da thread de captura de dados de processo
     hThreadCapturaProcesso = (HANDLE)_beginthreadex(
         NULL,
         0,
@@ -245,6 +252,7 @@ int main()
         exit(0);
     }
 
+    // criação da thread de captura de dados de otimização
     hThreadCapturaOtimizacao = (HANDLE)_beginthreadex(
         NULL,
         0,
@@ -261,14 +269,13 @@ int main()
     }
 
     DWORD dwRet;
-
     const DWORD numProcess = 2;
     HANDLE hProcess[numProcess];
     hProcess[0] = piExP.hProcess;
     hProcess[1] = piExO.hProcess;
 
-    dwRet = WaitForMultipleObjects(numProcess, hProcess, TRUE, INFINITE);
-    CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numProcess));
+    dwRet = WaitForMultipleObjects(numProcess, hProcess, FALSE, INFINITE);
+    SetEvent(hTerminateEvent);
     cc_printf(CCRED, "[S] Processo Exibicao de Dados de Processo encerrado \n");
     cc_printf(CCRED, "[S] Processo Exibicao de Dados de Otimizacao encerrado \n");
 
@@ -280,17 +287,38 @@ int main()
     const DWORD numThreads = 4;
     HANDLE hThreads[numThreads];
     hThreads[0] = hThreadLeituraDados;
-    hThreads[1] = hThreadLeituraTeclado;
-    hThreads[2] = hThreadCapturaProcesso;
-    hThreads[3] = hThreadCapturaOtimizacao;
+    hThreads[1] = hThreadCapturaProcesso;
+    hThreads[2] = hThreadCapturaOtimizacao;
+    hThreads[3] = hThreadLeituraTeclado;
 
     dwRet = WaitForMultipleObjects(numThreads, hThreads, TRUE, INFINITE);
-    CheckForError((dwRet >= WAIT_OBJECT_0) && (dwRet < WAIT_OBJECT_0 + numThreads));
 
     CloseHandle(hThreadLeituraDados);
     CloseHandle(hThreadLeituraTeclado);
     CloseHandle(hThreadCapturaProcesso);
     CloseHandle(hThreadCapturaOtimizacao);
+
+    DeleteCriticalSection(&csConsole);
+    DeleteCriticalSection(&csListaCircularIO);
+
+    CloseHandle(hBlockLeituraEvent);
+    CloseHandle(hBlockCapProcessoEvent);
+    CloseHandle(hBlockCapOtimizacaoEvent);
+    CloseHandle(hBlockExProcessoEvent);
+    CloseHandle(hBlockExOtimizacaoEvent);
+    CloseHandle(hMemoriaCircularCheiaEvent);
+    CloseHandle(hNovoEspacoMemoriaCircularEvent);
+    CloseHandle(hNovosDadosProcessoEvent);
+    CloseHandle(hNovosDadosOtimizacaoEvent);
+    CloseHandle(hClearConsoleEvent);
+    CloseHandle(hMailSlotProcessoCriadoEvent);
+    CloseHandle(hNovaMensagemProcesso);
+    CloseHandle(hMutexArquivo);
+    CloseHandle(hNovoEspacoArquivoCircularEvent);
+    CloseHandle(hNovaMensagemOtimizacao);
+    CloseHandle(hArquivoCircular);
+
+    CloseHandle(hTerminateEvent);
 
     cc_printf(CCRED, "[S] Saindo da thread Principal\n");
     exit(EXIT_SUCCESS);
@@ -300,14 +328,38 @@ int main()
 // --| Tarefa de Leitura do Teclado |----------------------------------------------------
 // --------------------------------------------------------------------------------------
 
+void WINAPI ThreadAuxiliarLeituraTeclado(LPVOID);
+
 void WINAPI ThreadLeituraTeclado(LPVOID tArgs) 
 {
 	cc_printf(CCWHITE, "[I] Thread Leitura do Teclado inicializada\n");
 
-    char key;
+    // criação da thread auxiliar de leitura do teclado
+    HANDLE hThreadAuxiliarLeituraDados = (HANDLE)_beginthreadex(
+        NULL,
+        0,
+        (CAST_FUNCTION) ThreadAuxiliarLeituraTeclado,
+        (LPVOID) NULL,
+        0,
+        (CAST_LPDWORD) NULL
+    );
+    if (hThreadAuxiliarLeituraDados == INVALID_HANDLE_VALUE) {
+		cc_printf(CCRED, "Erro na criação da thread auxiliar de Leitura de Dados!\n");
+        exit(0);
+    }
 
+    HANDLE hEvents[2] = { hTerminateEvent, hThreadAuxiliarLeituraDados };
+    WaitForMultipleObjects(2, hEvents, FALSE, INFINITE);
+
+    cc_printf(CCRED, "[S] Saindo da thread Leitura do Teclado\n");
+
+    _endthreadex(0);
+}
+
+void WINAPI ThreadAuxiliarLeituraTeclado(LPVOID tArgs)
+{
+    char key;
     int ret;
-    char buf[MAX_MSG];
 
    do {
        key = _getch();
@@ -337,8 +389,6 @@ void WINAPI ThreadLeituraTeclado(LPVOID tArgs)
            break;
        }
    } while (key != ESC);
-
-    cc_printf(CCRED, "[S] Saindo da thread Leitura do Teclado\n");
 
     _endthreadex(0);
 }
@@ -376,9 +426,9 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 {
 	cc_printf(CCWHITE, "[I] Thread Leitura de Dados inicializada\n");
 
-    HANDLE hInitProcessoEvents[2]   = { hMailSlotProcessoCreatedEvent, hTerminateEvent };
-    HANDLE hEvents[3]               = { hBlockLeituraEvent, hTerminateEvent, hMemoryFullEvent };
-	HANDLE hMemoriaEvents[3]        = { hBlockLeituraEvent, hTerminateEvent, hMemorySpaceEvent };
+    HANDLE hInitProcessoEvents[2]   = { hMailSlotProcessoCriadoEvent, hTerminateEvent };
+    HANDLE hEvents[3]               = { hBlockLeituraEvent, hTerminateEvent, hMemoriaCircularCheiaEvent };
+	HANDLE hMemoriaEvents[3]        = { hBlockLeituraEvent, hTerminateEvent, hNovoEspacoMemoriaCircularEvent };
     DWORD dwRet;
     DWORD numEvent;
 
@@ -391,7 +441,7 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 
     if (numEvent == 0) // MailSlot processo criada
     {
-        ResetEvent(hMailSlotProcessoCreatedEvent);
+        ResetEvent(hMailSlotProcessoCriadoEvent);
 
         hMailSlotProcesso = CreateFile("\\\\.\\mailslot\\processo",
             GENERIC_WRITE, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -408,7 +458,7 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 			dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
 			numEvent = dwRet - WAIT_OBJECT_0;
 
-			if (numEvent == 2) // hMemoryFullEvent - bloqueio por memória cheia
+			if (numEvent == 2) // hMemoriaCircularCheiaEvent - bloqueio por memória cheia
 			{
 				if (blockDados == FALSE)
 				{
@@ -421,9 +471,9 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 					dwRet = WaitForMultipleObjects(3, hMemoriaEvents, FALSE, INFINITE);
 					numEvent = dwRet - WAIT_OBJECT_0;
 
-					if (numEvent == 2) // hMemorySpaceEvent - espaço liberado na memória
+					if (numEvent == 2) // hNovoEspacoMemoriaCircularEvent - espaço liberado na memória
 					{
-						ResetEvent(hMemoryFullEvent);
+						ResetEvent(hMemoriaCircularCheiaEvent);
 						blockDados = FALSE;
 						if (blockAll != TRUE) InitializeTimers(); // liberado para leitura mas thread está bloqueada
 					}
@@ -461,7 +511,7 @@ void WINAPI ThreadLeituraDados(LPVOID tArgs)
 void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
     int memoria_ret;
-    char msg[MAX_MSG];
+    char msg[SIZE_MSG];
 
 	genDadosProcesso(msg, NSEQ_Processo);
 
@@ -472,7 +522,7 @@ void CALLBACK LerProcesso(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
     if (memoria_ret == MEMORY_FULL)
     {
         if (ProcessoRodando == FALSE) return; // já foi avisado que a memória está cheia
-        SetEvent(hMemoryFullEvent);
+        SetEvent(hMemoriaCircularCheiaEvent);
     }
 
     if (memoria_ret != MEMORY_FULL) 
@@ -486,7 +536,7 @@ void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
 {
     BOOL status;
     int memoria_ret;
-    char msg[MAX_MSG];
+    char msg[SIZE_MSG];
 
 	genDadosOtimizacao(msg, NSEQ_Otimizacao);
 
@@ -497,7 +547,7 @@ void CALLBACK LerOtimizacao(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
     if (memoria_ret == MEMORY_FULL)
     {
         if (OtimizacaoRodando == FALSE) return; // já foi avisado que a memória está cheia
-        SetEvent(hMemoryFullEvent);
+        SetEvent(hMemoriaCircularCheiaEvent);
     }
 
     if (memoria_ret != MEMORY_FULL) 
@@ -522,7 +572,7 @@ void CALLBACK LerAlarme(PVOID nTimerID, BOOLEAN TimerOrWaitFired)
     DWORD numEvent;
     BOOL status;
 
-    char msg[MAX_MSG];
+    char msg[SIZE_MSG];
 
 	genAlarme(msg, NSEQ_Alarme);
 
@@ -624,13 +674,13 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
 {
 	cc_printf(CCWHITE, "[I] Thread Captura de Dados de Processo inicializada\n");
 
-    HANDLE hInitEvents[2] = { hMailSlotProcessoCreatedEvent, hTerminateEvent };
+    HANDLE hInitEvents[2] = { hMailSlotProcessoCriadoEvent, hTerminateEvent };
     HANDLE hEvents[3] = { hBlockCapProcessoEvent, hTerminateEvent, hNovosDadosProcessoEvent };
     DWORD dwRet;
     DWORD numEvent;
 
     int ret;
-    char msg[MAX_MSG];
+    char msg[SIZE_MSG];
 
     dwRet = WaitForMultipleObjects(2, hInitEvents, FALSE, INFINITE);
     numEvent = dwRet - WAIT_OBJECT_0;
@@ -653,7 +703,7 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
                     //cc_printf(CCGREEN, "[Processo] %s\n", msg);
 					WriteMailSlot(hMailSlotProcesso, msg);
 					SetEvent(hNovaMensagemProcesso);
-                    PulseEvent(hMemorySpaceEvent);
+                    PulseEvent(hNovoEspacoMemoriaCircularEvent);
                 } while (ret != MEMORY_EMPTY);
             }
             else if (numEvent == 0)
@@ -681,20 +731,20 @@ void WINAPI ThreadCapturaProcesso(LPVOID)
 // --| Tarefa de Captura de dados do Processo |------------------------------------------
 // --------------------------------------------------------------------------------------
 
-BOOL temEspacoArquivoMemoria();
-int EscreverArquivoMemoria(char*);
+BOOL temEspacoArquivoCircular();
+int EscreverArquivoCircular(char*);
 
 void WINAPI ThreadCapturaOtimizacao(LPVOID)
 {
 	cc_printf(CCWHITE, "[I] Thread Captura de Dados de Otimizacao inicializada\n");
 
     HANDLE hEvents[3] = { hBlockCapOtimizacaoEvent, hTerminateEvent, hNovosDadosOtimizacaoEvent };
-    HANDLE hEventsMemoryFull[3] = { hBlockCapOtimizacaoEvent, hTerminateEvent, hEspacoMemoriaArquivoEvent };
+    HANDLE hEventsMemoryFull[3] = { hBlockCapOtimizacaoEvent, hTerminateEvent, hNovoEspacoArquivoCircularEvent };
     DWORD dwRet;
     DWORD numEvent;
 
     int ret;
-    char msg[MAX_MSG];
+    char msg[SIZE_MSG];
 
 	do {
 		dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
@@ -721,7 +771,7 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 		{
 			ret = MEMORY_EMPTY;
 			do {
-                if (temEspacoArquivoMemoria())
+                if (temEspacoArquivoCircular())
 				{
 					EnterCriticalSection(&csListaCircularIO);
 					ret = listaCircular.lerDadoOtimizacao(msg);
@@ -730,7 +780,7 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 
 					//cc_printf(CCBLUE, "[Otimizacao] %s\n", msg);
                     WaitForSingleObject(hMutexArquivo, INFINITE);
-					EscreverArquivoMemoria(msg);
+					EscreverArquivoCircular(msg);
                     ReleaseMutex(hMutexArquivo);
 
 					ResetEvent(hNovosDadosOtimizacaoEvent);
@@ -746,7 +796,7 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
 				}
 
 				SetEvent(hNovaMensagemOtimizacao);
-				PulseEvent(hMemorySpaceEvent);
+				PulseEvent(hNovoEspacoMemoriaCircularEvent);
 			} while (ret != MEMORY_EMPTY);
 		}
 	} while (numEvent != 1);
@@ -755,12 +805,12 @@ void WINAPI ThreadCapturaOtimizacao(LPVOID)
     _endthreadex(0);
 }
 
-BOOL temEspacoArquivoMemoria()
+BOOL temEspacoArquivoCircular()
 {
-    char buffer[MAX_MSG];
+    char buffer[SIZE_MSG];
 
-    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
-    if (FALSE == ReadFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
+    SetFilePointer(hArquivoCircular, 0, 0, FILE_BEGIN);
+    if (FALSE == ReadFile(hArquivoCircular, buffer, HeaderSize, 0, NULL))
     {
 		cc_printf(CCRED, "Erro ao ler cabecalho do arquivo\n");
     }
@@ -785,12 +835,12 @@ BOOL temEspacoArquivoMemoria()
     }
     return TRUE;
 }
-int EscreverArquivoMemoria(char *msg)
+int EscreverArquivoCircular(char *msg)
 {
-    char buffer[MAX_MSG];
+    char buffer[SIZE_MSG];
 
-    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
-    if (FALSE == ReadFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
+    SetFilePointer(hArquivoCircular, 0, 0, FILE_BEGIN);
+    if (FALSE == ReadFile(hArquivoCircular, buffer, HeaderSize, 0, NULL))
     {
 		cc_printf(CCRED, "Erro ao ler cabecalho do arquivo\n");
     }
@@ -815,8 +865,8 @@ int EscreverArquivoMemoria(char *msg)
     }
 
 	std::string LineMsg = std::string(msg) + '\n';
-	SetFilePointer(hArquivoMemoria, HeaderSize + lastLine * LineMsg.length(), 0, FILE_BEGIN);
-	if (FALSE == WriteFile(hArquivoMemoria, LineMsg.c_str(), LineMsg.length(), 0, NULL))
+	SetFilePointer(hArquivoCircular, HeaderSize + lastLine * LineMsg.length(), 0, FILE_BEGIN);
+	if (FALSE == WriteFile(hArquivoCircular, LineMsg.c_str(), LineMsg.length(), 0, NULL))
 	{
 		cc_printf(CCRED, "Erro ao escrever otimizacao no arquivo\n");
 	}
@@ -825,8 +875,8 @@ int EscreverArquivoMemoria(char *msg)
     numMsg++;
     sprintf_s(buffer, HeaderSize+1, "%02d %02d %02d\n", initLine, lastLine, numMsg);
 
-    SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
-    if (FALSE == WriteFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
+    SetFilePointer(hArquivoCircular, 0, 0, FILE_BEGIN);
+    if (FALSE == WriteFile(hArquivoCircular, buffer, HeaderSize, 0, NULL))
     {
 		cc_printf(CCRED, "Erro ao escrever no cabecalho do arquivo\n");
     }

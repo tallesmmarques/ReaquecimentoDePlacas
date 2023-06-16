@@ -12,7 +12,7 @@
 
 // Constantes
 #define ESC 27
-#define MAX_MSG 50
+#define SIZE_MSG 50
 
 // Utilitários
 #define _CHECKERROR    1        // Ativa função CheckForError
@@ -57,7 +57,7 @@ int ReadMailSlot(HANDLE hSlot, char* msg, int* msgRestantes)
     DWORD tamanhoProximaMensagem, numMensagens;
     DWORD cAllMessages;
     OVERLAPPED ov;
-    TCHAR buffer[MAX_MSG];
+    TCHAR buffer[SIZE_MSG];
 
     tamanhoProximaMensagem = numMensagens = 0;
 
@@ -85,7 +85,7 @@ int ReadMailSlot(HANDLE hSlot, char* msg, int* msgRestantes)
 
 HANDLE hTerminateEvent;
 HANDLE hBlockExProcessoEvent;
-HANDLE hMailSlotProcessoCreatedEvent;
+HANDLE hMailSlotProcessoCriadoEvent;
 HANDLE hMailSlot;
 HANDLE hNovaMensagemProcesso;
 
@@ -105,20 +105,20 @@ int main()
     CheckForError(hTerminateEvent);
     hBlockExProcessoEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "BlockExProcessoEvent");
     CheckForError(hBlockExProcessoEvent);
-    hMailSlotProcessoCreatedEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "MailSlotProcessoCreatedEvent");
-    CheckForError(hMailSlotProcessoCreatedEvent);
+    hMailSlotProcessoCriadoEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "MailSlotProcessoCriadoEvent");
+    CheckForError(hMailSlotProcessoCriadoEvent);
     hNovaMensagemProcesso = OpenEvent(EVENT_ALL_ACCESS, TRUE, "NovaMensagemProcesso");
     CheckForError(hNovaMensagemProcesso);
 
     hMailSlot = CreateMailslot("\\\\.\\mailslot\\processo", 0, MAILSLOT_WAIT_FOREVER, NULL);
     CheckForError(hMailSlot);
-    SetEvent(hMailSlotProcessoCreatedEvent);
+    SetEvent(hMailSlotProcessoCriadoEvent);
 
     HANDLE hEvents[3] = { hBlockExProcessoEvent, hTerminateEvent, hNovaMensagemProcesso };
     DWORD dwRet, numEvent;
     int status;
 	int msgRestantes = 0;
-    char msg[MAX_MSG];
+    char msg[SIZE_MSG];
     
     do {
         dwRet = WaitForMultipleObjects(3, hEvents, FALSE, INFINITE);
@@ -163,7 +163,7 @@ int main()
     CloseHandle(hBlockExProcessoEvent);
     CloseHandle(hTerminateEvent);
     CloseHandle(hMailSlot);
-    CloseHandle(hMailSlotProcessoCreatedEvent);
+    CloseHandle(hMailSlotProcessoCriadoEvent);
     CloseHandle(hNovaMensagemProcesso);
 
     cc_printf(CCRED, "[S] Encerrando Processo de Exibição de Dados de Processo\n");

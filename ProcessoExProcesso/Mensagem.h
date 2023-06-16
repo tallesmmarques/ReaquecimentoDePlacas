@@ -7,10 +7,6 @@
 #include <vector>
 #include <Windows.h>
 
-#ifndef MAX_MSG
-#define MAX_MSG 50
-#endif
-
 class Mensagem
 {
 private:

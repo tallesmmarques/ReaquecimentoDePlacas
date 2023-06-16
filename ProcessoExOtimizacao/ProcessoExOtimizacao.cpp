@@ -11,7 +11,7 @@
 
 // Constantes
 #define ESC 27
-#define MAX_MSG 50
+#define SIZE_MSG 50
 
 // Utilitários
 #define _CHECKERROR    1        // Ativa função CheckForError
@@ -54,7 +54,7 @@ HANDLE hNovaMensagemOtimizacao;
 
 HANDLE hArquivoMemoria;
 HANDLE hMutexArquivo;
-HANDLE hEspacoMemoriaArquivoEvent;
+HANDLE hNovoEspacoArquivoCircularEvent;
 #define MAX_MSG_FILE 50
 #define FILE_FULL 1
 #define OTIMIZACAO_SIZE 38
@@ -65,7 +65,7 @@ const int HeaderSize = strlen(HeaderInit);
 #define ERROR_ARQUIVO 2
 int ReadArquivoMemoria(char* msg, int* msgRestantes)
 {
-    TCHAR buffer[MAX_MSG];
+    TCHAR buffer[SIZE_MSG];
 
     SetFilePointer(hArquivoMemoria, 0, 0, FILE_BEGIN);
     if (FALSE == ReadFile(hArquivoMemoria, buffer, HeaderSize, 0, NULL))
@@ -143,14 +143,14 @@ int main()
     CheckForError(hArquivoMemoria != INVALID_HANDLE_VALUE);
     hMutexArquivo = OpenMutex(MUTEX_ALL_ACCESS, TRUE, "MutexArquivo");
     CheckForError(hMutexArquivo);
-    hEspacoMemoriaArquivoEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "EspacoMemoriaArquivoEvent");
-    CheckForError(hEspacoMemoriaArquivoEvent);
+    hNovoEspacoArquivoCircularEvent = OpenEvent(EVENT_ALL_ACCESS, TRUE, "NovoEspacoArquivoCircularEvent");
+    CheckForError(hNovoEspacoArquivoCircularEvent);
 
 	HANDLE hEvents[4] = { hBlockExOtimizacaoEvent, hTerminateEvent, hClearConsoleEvent, hNovaMensagemOtimizacao };
     DWORD dwRet, numEvent;
     int status;
 	int msgRestantes = 0;
-    char msg[MAX_MSG];
+    char msg[SIZE_MSG];
     
     BOOL bloqueada = FALSE;
     do {
@@ -198,7 +198,7 @@ int main()
                             mensagem.getMensagemFormatada().c_str());
                 } while (msgRestantes > 0);
             }
-            PulseEvent(hEspacoMemoriaArquivoEvent);
+            PulseEvent(hNovoEspacoArquivoCircularEvent);
             ResetEvent(hNovaMensagemOtimizacao);
         }
     } while (numEvent != 1); // ESC precionado no terminal principal
