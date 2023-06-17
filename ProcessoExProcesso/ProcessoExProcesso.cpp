@@ -146,9 +146,6 @@ int ReadMailSlot(char* msg, int* msgRestantes)
 {
     BOOL status;
     DWORD tamanhoProximaMensagem, numMensagens;
-    DWORD cAllMessages;
-    OVERLAPPED ov;
-    TCHAR buffer[SIZE_MSG];
 
     tamanhoProximaMensagem = numMensagens = 0;
 
